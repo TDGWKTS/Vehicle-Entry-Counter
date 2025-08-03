@@ -403,7 +403,8 @@
     // IMPORTANT: Ensure https://tdgwkts.github.io and https://tdgwkts.github.io/Vehicle-Entry-Counter are added to
     // "Authorized JavaScript origins" in Google Cloud Console -> APIs & Services -> Credentials -> OAuth 2.0 Client ID.
     // Share the Google Sheet (ID: 1JwcmXZuC935CFWrsbSZPh4na39LQKlOqPJTO-YrkjA8) with edit access to your Google account.
-    // Ensure the Google Sheet has a tab named "Sheet1". Allow popups for https://tdgwkts.github.io in your browser settings.
+    // Ensure the Google Sheet has a tab named "Sheet1" for regular syncs. Export creates a new tab "VEC_YYYYMMDD_HHMMSS".
+    // Allow popups for https://tdgwkts.github.io in your browser settings.
 
     // Google Sheets API configuration
     const CLIENT_ID = '648651517357-duuq9cq6itq8ouanre9r5kersj49t0ij.apps.googleusercontent.com';
@@ -605,6 +606,14 @@
             return date.toTimeString().substring(0, 8);
         }
 
+        // Helper function to format time as HHMMSS for export
+        function formatTimeForExport(date) {
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            const seconds = date.getSeconds().toString().padStart(2, '0');
+            return `${hours}${minutes}${seconds}`;
+        }
+
         // Function to add a new entry
         function addEntry() {
             console.log('ENTRY button clicked');
@@ -651,48 +660,7 @@
             }
         }
 
-        // Function to export data to CSV
-        function exportToCSV() {
-            console.log('EXPORT button clicked');
-            if (allEntries.length === 0) {
-                syncStatus.textContent = 'No data to export';
-                return;
-            }
-            
-            const data = [
-                ['HOURLY SUMMARY'],
-                ['Time Period', 'Vehicle Count'],
-                ...timePeriods.map((period, index) => [period, vehicleCounts[index]]),
-                ['', ''],
-                ['Total Entries', totalEntries],
-                ['', ''],
-                ['INDIVIDUAL ENTRIES'],
-                ['Timestamp', 'Time Slot', 'Formatted Time'],
-                ...allEntries.slice().reverse().map(entry => [
-                    entry.timestamp.toISOString(),
-                    entry.timeSlot,
-                    entry.formattedTime
-                ]),
-                ['', '', ''],
-                ['Total Entries', allEntries.length, '']
-            ];
-            
-            const csv = Papa.unparse(data);
-            const dateString = firstEntryDate ? firstEntryDate.toISOString().slice(0, 10).replace(/-/g, '') : new Date().toISOString().slice(0, 10).replace(/-/g, '');
-            const filename = `Vehicle_Entry_${dateString}.csv`;
-            
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.setAttribute('href', url);
-            link.setAttribute('download', filename);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-
-        // Function to ensure Sheet1 exists
+        // Function to ensure Sheet1 exists for regular syncs
         async function ensureSheetExists() {
             if (!accessToken) {
                 syncStatus.textContent = 'Not signed in';
@@ -724,6 +692,129 @@
                 syncStatus.textContent = `Cannot access spreadsheet: ${error.result?.error?.message || error.message || 'Unknown error'}. Verify spreadsheet ID and permissions.`;
                 syncIndicator.className = 'sync-indicator sync-inactive';
                 return false;
+            }
+        }
+
+        // Function to ensure export sheet exists
+        async function ensureExportSheetExists(sheetName) {
+            if (!accessToken) {
+                syncStatus.textContent = 'Not signed in';
+                syncIndicator.className = 'sync-indicator sync-inactive';
+                return false;
+            }
+            try {
+                const response = await gapi.client.sheets.spreadsheets.get({
+                    spreadsheetId: SPREADSHEET_ID
+                });
+                const sheets = response.result.sheets;
+                const sheetExists = sheets.some(sheet => sheet.properties.title === sheetName);
+                if (!sheetExists) {
+                    await gapi.client.sheets.spreadsheets.batchUpdate({
+                        spreadsheetId: SPREADSHEET_ID,
+                        requests: [{
+                            addSheet: {
+                                properties: {
+                                    title: sheetName
+                                }
+                            }
+                        }]
+                    });
+                    console.log(`Created sheet ${sheetName}`);
+                }
+                return true;
+            } catch (error) {
+                console.error(`Error checking/creating sheet ${sheetName}:`, error);
+                syncStatus.textContent = `Cannot create export sheet: ${error.result?.error?.message || error.message || 'Unknown error'}. Verify spreadsheet ID and permissions.`;
+                syncIndicator.className = 'sync-indicator sync-inactive';
+                return false;
+            }
+        }
+
+        // Function to export data to CSV and Google Sheet
+        async function exportToCSV() {
+            console.log('EXPORT button clicked');
+            if (allEntries.length === 0) {
+                syncStatus.textContent = 'No data to export';
+                return;
+            }
+            
+            const data = [
+                ['HOURLY SUMMARY'],
+                ['Time Period', 'Vehicle Count'],
+                ...timePeriods.map((period, index) => [period, vehicleCounts[index]]),
+                ['', ''],
+                ['Total Entries', totalEntries],
+                ['', ''],
+                ['INDIVIDUAL ENTRIES'],
+                ['Timestamp', 'Time Slot', 'Formatted Time'],
+                ...allEntries.slice().reverse().map(entry => [
+                    entry.timestamp.toISOString(),
+                    entry.timeSlot,
+                    entry.formattedTime
+                ]),
+                ['', '', ''],
+                ['Total Entries', allEntries.length, '']
+            ];
+            
+            // Generate filename and sheet name
+            const now = new Date();
+            const dateString = firstEntryDate ? firstEntryDate.toISOString().slice(0, 10).replace(/-/g, '') : now.toISOString().slice(0, 10).replace(/-/g, '');
+            const timeString = formatTimeForExport(now);
+            const filename = `VEC_${dateString}_${timeString}.csv`;
+            const sheetName = `VEC_${dateString}_${timeString}`;
+            
+            // Local CSV download
+            const csv = Papa.unparse(data);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Export to Google Sheet
+            if (accessToken) {
+                syncStatus.textContent = 'Exporting to Google Sheet...';
+                syncIndicator.className = 'sync-indicator sync-active';
+                
+                if (await ensureExportSheetExists(sheetName)) {
+                    try {
+                        await gapi.client.sheets.spreadsheets.values.update({
+                            spreadsheetId: SPREADSHEET_ID,
+                            range: `${sheetName}!A1`,
+                            valueInputOption: 'RAW',
+                            resource: { values: data }
+                        });
+                        syncStatus.textContent = 'Exported to Google Sheet and downloaded';
+                        syncIndicator.className = 'sync-indicator sync-active';
+                        setTimeout(() => {
+                            syncStatus.textContent = 'Connected to Google Sheets';
+                        }, 3000);
+                    } catch (error) {
+                        console.error('Error exporting to Google Sheet:', error);
+                        let errorMessage = error.result?.error?.message || error.message || 'Unknown error';
+                        if (error.result?.error?.status === 'PERMISSION_DENIED') {
+                            errorMessage = 'Permission denied. Share the spreadsheet with your Google account.';
+                        } else if (error.result?.error?.status === 'UNAUTHENTICATED') {
+                            accessToken = null;
+                            errorMessage = 'Authentication expired. Click Sign In and allow popups.';
+                            initGoogleSignIn();
+                        } else if (error.result?.error?.status === 'INVALID_ARGUMENT') {
+                            errorMessage = `Invalid request. Ensure the spreadsheet has a tab named "${sheetName}" and verify the spreadsheet ID.`;
+                        }
+                        syncStatus.textContent = `Export failed: ${errorMessage}`;
+                        syncIndicator.className = 'sync-indicator sync-inactive';
+                    }
+                }
+            } else {
+                syncStatus.textContent = 'Not signed in. Data downloaded locally.';
+                syncIndicator.className = 'sync-indicator sync-inactive';
+                setTimeout(() => {
+                    syncStatus.textContent = 'Not signed in';
+                }, 3000);
             }
         }
 
@@ -822,7 +913,7 @@
             }
         }
 
-        // Function to sync data to Google Sheets
+        // Function to sync data to Google Sheets (Sheet1)
         async function syncToGoogleSheets() {
             if (!accessToken) {
                 syncStatus.textContent = 'Not signed in';
