@@ -433,6 +433,10 @@
     let allEntries = [];
     let accessToken = null;
     let tokenClient = null;
+    let lastExportTime = null;
+    let lastActivityTime = null;
+    let idleTimeout = null;
+    const IDLE_TIME = 5 * 60 * 1000; // 5 minutes in milliseconds
 
     // Wait for DOM to load before accessing elements
     document.addEventListener('DOMContentLoaded', () => {
@@ -639,6 +643,7 @@
             updateTable();
             updateTotalCount();
             syncToGoogleSheets();
+            resetIdleTimer();
         }
 
         // Function to undo the last entry
@@ -657,6 +662,7 @@
                 updateTable();
                 updateTotalCount();
                 syncToGoogleSheets();
+                resetIdleTimer();
             }
         }
 
@@ -730,13 +736,29 @@
             }
         }
 
-        // Function to export data to CSV and Google Sheet
-        async function exportToCSV() {
-            console.log('EXPORT button clicked');
+        // Function to export data to Google Sheet
+        async function exportToGoogleSheet(context = 'manual') {
             if (allEntries.length === 0) {
-                syncStatus.textContent = 'No data to export';
-                return;
+                if (context === 'manual') {
+                    syncStatus.textContent = 'No data to export';
+                }
+                return false;
             }
+            
+            if (!accessToken) {
+                if (context === 'manual') {
+                    syncStatus.textContent = 'Not signed in. Data downloaded locally.';
+                    setTimeout(() => {
+                        syncStatus.textContent = 'Not signed in';
+                    }, 3000);
+                }
+                return false;
+            }
+            
+            const now = new Date();
+            const dateString = firstEntryDate ? firstEntryDate.toISOString().slice(0, 10).replace(/-/g, '') : now.toISOString().slice(0, 10).replace(/-/g, '');
+            const timeString = formatTimeForExport(now);
+            const sheetName = `VEC_${dateString}_${timeString}`;
             
             const data = [
                 ['HOURLY SUMMARY'],
@@ -756,12 +778,78 @@
                 ['Total Entries', allEntries.length, '']
             ];
             
-            // Generate filename and sheet name
+            syncStatus.textContent = `Exporting to Google Sheet (${context})...`;
+            syncIndicator.className = 'sync-indicator sync-active';
+            
+            if (await ensureExportSheetExists(sheetName)) {
+                try {
+                    await gapi.client.sheets.spreadsheets.values.update({
+                        spreadsheetId: SPREADSHEET_ID,
+                        range: `${sheetName}!A1`,
+                        valueInputOption: 'RAW',
+                        resource: { values: data }
+                    });
+                    lastExportTime = now;
+                    syncStatus.textContent = context === 'manual' ? 
+                        'Exported to Google Sheet and downloaded' : 
+                        `Auto-exported to Google Sheet (${context})`;
+                    syncIndicator.className = 'sync-indicator sync-active';
+                    setTimeout(() => {
+                        syncStatus.textContent = 'Connected to Google Sheets';
+                    }, 3000);
+                    return true;
+                } catch (error) {
+                    console.error(`Error exporting to Google Sheet (${context}):`, error);
+                    let errorMessage = error.result?.error?.message || error.message || 'Unknown error';
+                    if (error.result?.error?.status === 'PERMISSION_DENIED') {
+                        errorMessage = 'Permission denied. Share the spreadsheet with your Google account.';
+                    } else if (error.result?.error?.status === 'UNAUTHENTICATED') {
+                        accessToken = null;
+                        errorMessage = 'Authentication expired. Click Sign In and allow popups.';
+                        initGoogleSignIn();
+                    } else if (error.result?.error?.status === 'INVALID_ARGUMENT') {
+                        errorMessage = `Invalid request. Ensure the spreadsheet has a tab named "${sheetName}" and verify the spreadsheet ID.`;
+                    }
+                    if (context === 'manual') {
+                        syncStatus.textContent = `Export failed: ${errorMessage}`;
+                        syncIndicator.className = 'sync-indicator sync-inactive';
+                    }
+                    return false;
+                }
+            }
+            return false;
+        }
+
+        // Function to export data to CSV and Google Sheet
+        async function exportToCSV() {
+            console.log('EXPORT button clicked');
+            if (allEntries.length === 0) {
+                syncStatus.textContent = 'No data to export';
+                return;
+            }
+            
             const now = new Date();
             const dateString = firstEntryDate ? firstEntryDate.toISOString().slice(0, 10).replace(/-/g, '') : now.toISOString().slice(0, 10).replace(/-/g, '');
             const timeString = formatTimeForExport(now);
             const filename = `VEC_${dateString}_${timeString}.csv`;
-            const sheetName = `VEC_${dateString}_${timeString}`;
+            
+            const data = [
+                ['HOURLY SUMMARY'],
+                ['Time Period', 'Vehicle Count'],
+                ...timePeriods.map((period, index) => [period, vehicleCounts[index]]),
+                ['', ''],
+                ['Total Entries', totalEntries],
+                ['', ''],
+                ['INDIVIDUAL ENTRIES'],
+                ['Timestamp', 'Time Slot', 'Formatted Time'],
+                ...allEntries.slice().reverse().map(entry => [
+                    entry.timestamp.toISOString(),
+                    entry.timeSlot,
+                    entry.formattedTime
+                ]),
+                ['', '', ''],
+                ['Total Entries', allEntries.length, '']
+            ];
             
             // Local CSV download
             const csv = Papa.unparse(data);
@@ -776,46 +864,26 @@
             document.body.removeChild(link);
 
             // Export to Google Sheet
-            if (accessToken) {
-                syncStatus.textContent = 'Exporting to Google Sheet...';
-                syncIndicator.className = 'sync-indicator sync-active';
-                
-                if (await ensureExportSheetExists(sheetName)) {
-                    try {
-                        await gapi.client.sheets.spreadsheets.values.update({
-                            spreadsheetId: SPREADSHEET_ID,
-                            range: `${sheetName}!A1`,
-                            valueInputOption: 'RAW',
-                            resource: { values: data }
-                        });
-                        syncStatus.textContent = 'Exported to Google Sheet and downloaded';
-                        syncIndicator.className = 'sync-indicator sync-active';
-                        setTimeout(() => {
-                            syncStatus.textContent = 'Connected to Google Sheets';
-                        }, 3000);
-                    } catch (error) {
-                        console.error('Error exporting to Google Sheet:', error);
-                        let errorMessage = error.result?.error?.message || error.message || 'Unknown error';
-                        if (error.result?.error?.status === 'PERMISSION_DENIED') {
-                            errorMessage = 'Permission denied. Share the spreadsheet with your Google account.';
-                        } else if (error.result?.error?.status === 'UNAUTHENTICATED') {
-                            accessToken = null;
-                            errorMessage = 'Authentication expired. Click Sign In and allow popups.';
-                            initGoogleSignIn();
-                        } else if (error.result?.error?.status === 'INVALID_ARGUMENT') {
-                            errorMessage = `Invalid request. Ensure the spreadsheet has a tab named "${sheetName}" and verify the spreadsheet ID.`;
-                        }
-                        syncStatus.textContent = `Export failed: ${errorMessage}`;
-                        syncIndicator.className = 'sync-indicator sync-inactive';
-                    }
-                }
-            } else {
-                syncStatus.textContent = 'Not signed in. Data downloaded locally.';
-                syncIndicator.className = 'sync-indicator sync-inactive';
-                setTimeout(() => {
-                    syncStatus.textContent = 'Not signed in';
-                }, 3000);
+            await exportToGoogleSheet('manual');
+            resetIdleTimer();
+        }
+
+        // Function to reset idle timer
+        function resetIdleTimer() {
+            lastActivityTime = new Date();
+            if (idleTimeout) {
+                clearTimeout(idleTimeout);
             }
+            idleTimeout = setTimeout(checkIdle, IDLE_TIME);
+        }
+
+        // Function to check for idle time and export
+        async function checkIdle() {
+            const now = new Date();
+            if (allEntries.length > 0 && (!lastExportTime || now - lastActivityTime >= IDLE_TIME)) {
+                await exportToGoogleSheet('idle');
+            }
+            idleTimeout = setTimeout(checkIdle, IDLE_TIME);
         }
 
         // Wait for Google Identity Services and gapi to load
@@ -868,6 +936,7 @@
                             syncStatus.textContent = 'Connected to Google Sheets';
                             syncIndicator.className = 'sync-indicator sync-active';
                             checkSpreadsheetAccess();
+                            resetIdleTimer();
                         } else {
                             console.error('Authentication failed: No access token received');
                             syncStatus.textContent = 'Authentication failed. Click Sign In and allow popups.';
@@ -1002,11 +1071,21 @@
             console.log('Attaching table title listener');
             showAllTablePeriods = !showAllTablePeriods;
             updateTable();
+            resetIdleTimer();
         });
         chartTitle.addEventListener('click', () => {
             console.log('Attaching chart title listener');
             showAllChartPeriods = !showAllChartPeriods;
             updateChart();
+            resetIdleTimer();
+        });
+
+        // Handle browser close
+        window.addEventListener('beforeunload', async (event) => {
+            console.log('beforeunload event triggered');
+            if (allEntries.length > 0 && accessToken) {
+                await exportToGoogleSheet('close');
+            }
         });
 
         // Initialize
@@ -1014,6 +1093,7 @@
         updateChart();
         updateTotalCount();
         waitForGoogleApis();
+        resetIdleTimer();
 
         // Sync to Google Sheets every minute if authenticated
         setInterval(() => {
