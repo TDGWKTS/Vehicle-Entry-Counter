@@ -393,61 +393,25 @@ const API_KEY = 'AIzaSyCnDPtA_eNCd1BTH0mmyoOj-rOnxrxJ0sg';
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
 
 // Application State
-const timePeriods = [
-    "07:30 - 08:29", "08:30 - 09:29", "09:30 - 10:29",
-    "10:30 - 11:29", "11:30 - 12:29", "12:30 - 13:29",
-    "13:30 - 14:29", "14:30 - 15:29", "15:30 - 16:29",
-    "16:30 - 17:29", "17:30 - 18:29", "18:30 - 19:29",
-    "19:30 - 20:29", "20:30 - 21:29", "21:30 - 22:29",
-    "22:30 - 23:29", "23:30 - 00:29", "00:30 - 01:29",
-    "01:30 - 02:29"
-];
+let googleAPIReady = false;
+let authToken = null;
+let retryCount = 0;
+const MAX_RETRIES = 3;
 
-let vehicleCounts = Array(timePeriods.length).fill(0);
-let totalEntries = 0;
-let showAllTablePeriods = false;
-let showAllChartPeriods = false;
-let firstEntryDate = null;
-let allEntries = [];
-let vehicleChart;
-let googleAPIInitialized = false;
-
-// DOM Elements
-const elements = {
-    totalCount: document.getElementById('totalCount'),
-    tableBody: document.getElementById('tableBody'),
-    tableTitle: document.getElementById('tableTitle'),
-    chartTitle: document.getElementById('chartTitle'),
-    entryBtn: document.getElementById('entryBtn'),
-    undoBtn: document.getElementById('undoBtn'),
-    exportBtn: document.getElementById('exportBtn'),
-    syncIndicator: document.getElementById('syncIndicator'),
-    syncStatus: document.getElementById('syncStatus')
-};
-
-// Initialize the application
-async function initializeApp() {
-    loadFromLocalStorage();
-    initializeChart();
-    updateUI();
-    
-    try {
-        await initializeGoogleAPI();
-        setupPeriodicSync();
-    } catch (error) {
-        console.error('Initialization failed:', error);
-        updateSyncStatus("Initialization error - check console", true);
-    }
-}
-
-// Google API Initialization
+// Initialize Google API with robust error handling
 async function initializeGoogleAPI() {
-    if (googleAPIInitialized) return true;
+    try {
+        // Load the Google API client library
+        await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://apis.google.com/js/api.js';
+            script.onload = resolve;
+            script.onerror = () => reject(new Error('Failed to load Google API script'));
+            document.head.appendChild(script);
+        });
 
-    return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://apis.google.com/js/api.js';
-        script.onload = () => {
+        // Initialize the client library
+        await new Promise((resolve, reject) => {
             gapi.load('client:auth2', {
                 callback: async () => {
                     try {
@@ -457,390 +421,202 @@ async function initializeGoogleAPI() {
                             discoveryDocs: ["https://sheets.googleapis.com/$discovery/rest?version=v4"],
                             scope: SCOPES
                         });
-                        googleAPIInitialized = true;
-                        updateSyncStatus("Ready to sync");
-                        resolve(true);
-                    } catch (error) {
-                        console.error('GAPI init error:', error);
-                        reject(error);
+                        googleAPIReady = true;
+                        updateSyncStatus("API ready");
+                        resolve();
+                    } catch (initError) {
+                        reject(initError);
                     }
                 },
-                onerror: (err) => {
-                    console.error('Failed to load GAPI client:', err);
-                    reject(err);
-                }
+                onerror: () => reject(new Error('Failed to load client:auth2'))
             });
-        };
-        script.onerror = () => {
-            reject(new Error('Failed to load Google API script'));
-        };
-        document.body.appendChild(script);
-    });
+        });
+
+        // Check if we're already signed in
+        if (gapi.auth2.getAuthInstance().isSignedIn.get()) {
+            authToken = gapi.client.getToken();
+            updateSyncStatus("Already authenticated");
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('Google API initialization failed:', error);
+        updateSyncStatus(`Init failed: ${error.message}`, true);
+        
+        // Automatic retry with exponential backoff
+        if (retryCount < MAX_RETRIES) {
+            retryCount++;
+            const delay = Math.pow(2, retryCount) * 1000;
+            updateSyncStatus(`Retrying in ${delay/1000} seconds...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return initializeGoogleAPI();
+        }
+        
+        return false;
+    }
 }
 
-// Authentication Handler
-async function handleAuthentication() {
-    if (!googleAPIInitialized) {
-        await initializeGoogleAPI();
+// Enhanced authentication handler
+async function handleAuth() {
+    if (!googleAPIReady) {
+        const initialized = await initializeGoogleAPI();
+        if (!initialized) return false;
     }
 
     return new Promise((resolve) => {
+        const authInstance = gapi.auth2.getAuthInstance();
+        
+        if (authInstance.isSignedIn.get()) {
+            resolve(true);
+            return;
+        }
+
         const tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: CLIENT_ID,
             scope: SCOPES,
             callback: (response) => {
                 if (response.error) {
-                    console.error('Auth error:', response.error);
+                    handleAuthError(response.error);
                     resolve(false);
                 } else {
+                    authToken = response;
                     updateSyncStatus("Authenticated");
                     resolve(true);
                 }
             },
             error_callback: (error) => {
-                console.error('Auth error:', error);
+                handleAuthError(error);
                 resolve(false);
             }
         });
 
-        if (gapi.client.getToken() === null) {
-            tokenClient.requestAccessToken({prompt: 'consent'});
-        } else {
-            tokenClient.requestAccessToken({prompt: ''});
-        }
+        tokenClient.requestAccessToken({
+            prompt: gapi.client.getToken() ? '' : 'consent'
+        });
     });
 }
 
-// Google Sheets Sync
+function handleAuthError(error) {
+    console.error('Authentication error:', error);
+    
+    let errorMessage = "Authentication failed";
+    if (error.error === "popup_closed_by_user") {
+        errorMessage = "Please complete the sign-in popup";
+    } else if (error.error === "access_denied") {
+        errorMessage = "Access denied - check Google Cloud Console settings";
+    } else if (error.error) {
+        errorMessage = error.error;
+    }
+    
+    updateSyncStatus(errorMessage, true);
+}
+
+// Robust sync function with retry logic
 async function syncToGoogleSheets() {
-    if (!googleAPIInitialized) {
+    if (!googleAPIReady) {
         const initialized = await initializeGoogleAPI();
         if (!initialized) return false;
     }
 
-    if (!gapi.client.getToken()) {
-        const authenticated = await handleAuthentication();
+    if (!authToken) {
+        const authenticated = await handleAuth();
         if (!authenticated) return false;
     }
 
-    updateSyncStatus("Syncing to Google Sheets...");
-
     try {
+        updateSyncStatus("Starting sync...");
+        
+        // Prepare data
         const values = [
-            ['=== Vehicle Entry Data ===', '', ''],
-            ['Timestamp', 'Time Slot', 'Formatted Time'],
+            ['=== Vehicle Data ==='],
+            ['Timestamp', 'Count', 'Time Slot'],
             ...allEntries.map(entry => [
                 entry.timestamp.toISOString(),
-                entry.timeSlot,
-                entry.formattedTime
-            ]),
-            ['', '', ''],
-            ['=== Hourly Summary ===', '', ''],
-            ['Time Period', 'Count', ''],
-            ...timePeriods.map((period, index) => [period, vehicleCounts[index], '']),
-            ['', '', ''],
-            ['Total Entries', totalEntries, '']
+                1,
+                entry.timeSlot
+            ])
         ];
 
+        // Execute API call
         const response = await gapi.client.sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
-            range: 'Sheet1',
-            valueInputOption: 'RAW',
-            insertDataOption: 'INSERT_ROWS',
+            range: 'Sheet1!A1',
+            valueInputOption: 'USER_ENTERED',
             resource: { values }
         });
 
         updateSyncStatus(`Synced at ${new Date().toLocaleTimeString()}`);
-        saveToLocalStorage();
         return true;
     } catch (error) {
         console.error('Sync error:', error);
-        let errorMessage = error.result?.error?.message || error.message;
         
-        if (errorMessage.includes("token") || errorMessage.includes("auth")) {
+        // Handle specific error cases
+        if (error.status === 403) {
+            updateSyncStatus("Access denied - check permissions", true);
+        } else if (error.status === 401) {
             updateSyncStatus("Session expired - reauthenticating...");
-            gapi.client.setToken(null);
-            setTimeout(syncToGoogleSheets, 2000);
+            authToken = null;
+            return syncToGoogleSheets(); // Retry
         } else {
-            updateSyncStatus("Sync failed: " + errorMessage, true);
+            updateSyncStatus(`Sync failed: ${error.message}`, true);
         }
+        
         return false;
     }
 }
 
-// Local Storage Functions
-function saveToLocalStorage() {
-    localStorage.setItem('vehicleCounterData', JSON.stringify({
-        counts: vehicleCounts,
-        total: totalEntries,
-        entries: allEntries,
-        firstDate: firstEntryDate
-    }));
-}
-
-function loadFromLocalStorage() {
-    const data = JSON.parse(localStorage.getItem('vehicleCounterData'));
-    if (data) {
-        vehicleCounts = data.counts || vehicleCounts;
-        totalEntries = data.total || totalEntries;
-        allEntries = data.entries || allEntries;
-        firstEntryDate = data.firstDate ? new Date(data.firstDate) : null;
-    }
-}
-
-// Chart Functions
-function initializeChart() {
-    const ctx = document.getElementById('vehicleChart').getContext('2d');
-    vehicleChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: timePeriods,
-            datasets: [{
-                label: 'Vehicles per Time Period',
-                data: vehicleCounts,
-                backgroundColor: 'rgba(54, 162, 235, 0.7)',
-                borderColor: 'rgba(54, 162, 235, 1)',
-                borderWidth: 1,
-                borderRadius: 5
-            }]
-        },
-        options: getChartOptions()
-    });
-}
-
-function getChartOptions() {
-    return {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { display: false },
-            tooltip: {
-                backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                padding: 10,
-                titleFont: { size: 14 },
-                bodyFont: { size: 13 },
-                callbacks: {
-                    label: (context) => `Vehicles: ${context.raw}`
-                }
-            }
-        },
-        scales: {
-            x: {
-                beginAtZero: true,
-                ticks: { precision: 0, font: { size: 12 } },
-                grid: { color: 'rgba(0, 0, 0, 0.05)' },
-                title: {
-                    display: true,
-                    text: 'Number of Vehicles',
-                    font: { size: 14, weight: 'bold' }
-                }
-            },
-            y: {
-                grid: { display: false },
-                ticks: { font: { size: 12 } },
-                title: {
-                    display: true,
-                    text: 'Time Period',
-                    font: { size: 14, weight: 'bold' }
-                }
-            }
+// Initialize the application with comprehensive error handling
+async function initializeApp() {
+    try {
+        // First try to initialize without user interaction
+        await initializeGoogleAPI();
+        
+        // If we have entries but no auth, try silent auth
+        if (allEntries.length > 0 && !authToken) {
+            await handleAuth();
         }
-    };
-}
-
-// Core Application Functions
-function getCurrentPeriodIndex() {
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    
-    if (hours === 23 && minutes >= 30) return 16;
-    if (hours === 0) return minutes < 30 ? 16 : 17;
-    if (hours === 1) return minutes < 30 ? 17 : 18;
-    if (hours === 2 && minutes < 30) return 18;
-    
-    if (hours >= 7 && hours < 22) {
-        return minutes >= 30 ? Math.min(hours - 6, 15) : Math.max(hours - 7, 0);
+        
+        // Set up periodic sync (every 5 minutes)
+        setInterval(() => {
+            if (allEntries.length > 0) {
+                syncToGoogleSheets();
+            }
+        }, 300000);
+        
+    } catch (error) {
+        console.error('App initialization failed:', error);
+        updateSyncStatus("Initialization failed - check console", true);
+        
+        // Provide recovery option
+        const recoverBtn = document.createElement('button');
+        recoverBtn.textContent = "Retry Initialization";
+        recoverBtn.onclick = initializeApp;
+        recoverBtn.style.marginLeft = '10px';
+        document.getElementById('syncStatus').appendChild(recoverBtn);
     }
-    if (hours === 22) return minutes < 30 ? 14 : 15;
-    
-    return -1;
 }
 
-function updateUI() {
-    updateChart();
-    updateTable();
-    updateTotalCount();
-}
-
-function updateTable() {
-    const currentPeriodIndex = getCurrentPeriodIndex();
-    elements.tableBody.innerHTML = '';
-    
-    const periodsToShow = showAllTablePeriods 
-        ? Array.from({ length: timePeriods.length }, (_, i) => ({
-            period: timePeriods[i],
-            count: vehicleCounts[i],
-            isCurrent: i === currentPeriodIndex
-        })).reverse()
-        : Array.from({ length: Math.min(10, currentPeriodIndex + 1) }, (_, i) => ({
-            period: timePeriods[currentPeriodIndex - i],
-            count: vehicleCounts[currentPeriodIndex - i],
-            isCurrent: (currentPeriodIndex - i) === currentPeriodIndex
-        }));
-    
-    periodsToShow.forEach(item => {
-        const row = document.createElement('tr');
-        if (item.isCurrent) row.className = 'current-period';
-        row.innerHTML = `<td>${item.period}</td><td>${item.count}</td>`;
-        elements.tableBody.appendChild(row);
-    });
-    
-    elements.tableTitle.textContent = showAllTablePeriods 
-        ? 'All Time Periods (Click to Collapse)' 
-        : 'Recent Entries (Click to Expand)';
-}
-
-function updateChart() {
-    const currentPeriodIndex = getCurrentPeriodIndex();
-    
-    if (showAllChartPeriods) {
-        vehicleChart.data.labels = [...timePeriods].reverse();
-        vehicleChart.data.datasets[0].data = [...vehicleCounts].reverse();
-    } else {
-        const startIndex = Math.max(0, currentPeriodIndex - 9);
-        vehicleChart.data.labels = timePeriods.slice(startIndex, currentPeriodIndex + 1).reverse();
-        vehicleChart.data.datasets[0].data = vehicleCounts.slice(startIndex, currentPeriodIndex + 1).reverse();
-    }
-    
-    elements.chartTitle.textContent = showAllChartPeriods 
-        ? 'All Time Periods (Click to Collapse)' 
-        : 'Recent Entries (Click to Expand)';
-    
-    vehicleChart.update();
-}
-
-function updateTotalCount() {
-    elements.totalCount.textContent = totalEntries;
-}
-
+// Update status display
 function updateSyncStatus(message, isError = false) {
-    elements.syncStatus.textContent = message;
-    elements.syncIndicator.className = `sync-indicator ${isError ? 'sync-inactive' : 'sync-active'}`;
+    const statusElement = document.getElementById('syncStatus');
+    statusElement.textContent = message;
+    statusElement.style.color = isError ? '#d32f2f' : '#388e3c';
+    
+    const indicator = document.getElementById('syncIndicator');
+    indicator.style.backgroundColor = isError ? '#d32f2f' : '#388e3c';
 }
 
-function formatTime(date) {
-    return date.toTimeString().substring(0, 8);
-}
-
-// Entry Management
-function addEntry() {
-    const periodIndex = getCurrentPeriodIndex();
-    if (periodIndex === -1) {
-        alert("Outside of counting hours (07:30-02:29)");
-        return;
-    }
-    
-    const now = new Date();
-    vehicleCounts[periodIndex]++;
-    totalEntries++;
-    
-    if (!firstEntryDate) {
-        firstEntryDate = now;
-    }
-    
-    allEntries.push({
-        timestamp: now,
-        timeSlot: timePeriods[periodIndex],
-        formattedTime: formatTime(now)
-    });
-    
-    updateUI();
-    syncToGoogleSheets();
-    saveToLocalStorage();
-}
-
-function undoEntry() {
-    if (totalEntries > 0 && allEntries.length > 0) {
-        const lastEntry = allEntries.pop();
-        const periodIndex = timePeriods.indexOf(lastEntry.timeSlot);
-        
-        if (periodIndex !== -1) {
-            vehicleCounts[periodIndex]--;
-            totalEntries--;
-        }
-        
-        updateUI();
-        syncToGoogleSheets();
-        saveToLocalStorage();
-    }
-}
-
-function exportToCSV() {
-    if (allEntries.length === 0) {
-        alert("No data to export");
-        return;
-    }
-    
-    const data = [
-        ['HOURLY SUMMARY'],
-        ['Time Period', 'Vehicle Count'],
-        ...timePeriods.map((period, i) => [period, vehicleCounts[i]]).reverse(),
-        ['', ''],
-        ['Total Entries', totalEntries],
-        ['', ''],
-        ['', ''],
-        ['INDIVIDUAL ENTRIES'],
-        ['Timestamp', 'Time Slot', 'Formatted Time'],
-        ...allEntries.slice().reverse().map(e => [e.timestamp.toISOString(), e.timeSlot, e.formattedTime]),
-        ['', '', ''],
-        ['Total Entries', allEntries.length, '']
-    ];
-    
-    const csv = Papa.unparse(data);
-    const dateString = firstEntryDate.toISOString().slice(0, 10).replace(/-/g, '');
-    const filename = `Vehicle_Entry_${dateString}.csv`;
-    
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', filename);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
-
-// Periodic Sync Setup
-function setupPeriodicSync() {
-    setInterval(() => {
-        if (allEntries.length > 0 && googleAPIInitialized) {
-            syncToGoogleSheets();
-        }
-    }, 60000);
-}
-
-// Event Listeners
-function setupEventListeners() {
-    elements.entryBtn.addEventListener('click', addEntry);
-    elements.undoBtn.addEventListener('click', undoEntry);
-    elements.exportBtn.addEventListener('click', exportToCSV);
-    elements.tableTitle.addEventListener('click', () => {
-        showAllTablePeriods = !showAllTablePeriods;
-        updateTable();
-    });
-    elements.chartTitle.addEventListener('click', () => {
-        showAllChartPeriods = !showAllChartPeriods;
-        updateChart();
-    });
-}
-
-// Initialize the application
+// Start the application
 document.addEventListener('DOMContentLoaded', () => {
-    setupEventListeners();
+    // Load any existing data
+    loadFromLocalStorage();
+    
+    // Initialize the app
     initializeApp();
+    
+    // Set up event listeners
+    document.getElementById('entryBtn').addEventListener('click', addEntry);
+    document.getElementById('exportBtn').addEventListener('click', exportToCSV);
 });
 
 </script>
