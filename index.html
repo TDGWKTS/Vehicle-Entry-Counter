@@ -610,7 +610,7 @@
             console.log('ENTRY button clicked');
             const periodIndex = getCurrentPeriodIndex();
             if (periodIndex === -1) {
-                alert("Outside of counting hours (07:30-02:29)");
+                syncStatus.textContent = 'Outside of counting hours (07:30-02:29)';
                 return;
             }
             
@@ -630,7 +630,6 @@
             updateTable();
             updateTotalCount();
             syncToGoogleSheets();
-            alert('Entry added');
         }
 
         // Function to undo the last entry
@@ -649,9 +648,6 @@
                 updateTable();
                 updateTotalCount();
                 syncToGoogleSheets();
-                alert('Last entry undone');
-            } else {
-                alert('No entries to undo');
             }
         }
 
@@ -659,7 +655,7 @@
         function exportToCSV() {
             console.log('EXPORT button clicked');
             if (allEntries.length === 0) {
-                alert("No data to export");
+                syncStatus.textContent = 'No data to export';
                 return;
             }
             
@@ -694,7 +690,6 @@
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            alert('Data exported as CSV');
         }
 
         // Function to ensure Sheet1 exists
@@ -907,11 +902,9 @@
             console.log('Attaching SIGN IN button listener');
             if (tokenClient) {
                 tokenClient.requestAccessToken({ prompt: 'consent' });
-                alert('Sign-in initiated. Allow popups if prompted.');
             } else {
                 syncStatus.textContent = 'Sign-in not initialized. Refresh the page.';
                 syncIndicator.className = 'sync-indicator sync-inactive';
-                alert('Sign-in not initialized. Please refresh the page.');
             }
         });
         tableTitle.addEventListener('click', () => {
