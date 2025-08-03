@@ -385,6 +385,159 @@
     </div>
 
     <script>
+
+
+ // Google API Configuration with your credentials
+        const SPREADSHEET_ID = '1JwcmXZuC935CFWrsbSZPh4na39LQKlOqPJTO-YrkjA8';
+        const CLIENT_ID = '648651517357-duuq9cq6itq8ouanre9r5kersj49t0ij.apps.googleusercontent.com';
+        const API_KEY = 'AIzaSyCnDPtA_eNCd1BTH0mmyoOj-rOnxrxJ0sg';
+        const DISCOVERY_DOCS = ["https://sheets.googleapis.com/$discovery/rest?version=v4"];
+        const SCOPES = "https://www.googleapis.com/auth/spreadsheets";
+
+        // [All your existing variable declarations remain the same]
+        let isSignedIn = false;
+        let gapiInited = false;
+        let gisInited = false;
+
+        // Initialize Google API Client
+        function initializeGapiClient() {
+            gapi.client.init({
+                apiKey: API_KEY,
+                clientId: CLIENT_ID,
+                discoveryDocs: DISCOVERY_DOCS,
+                scope: SCOPES
+            }).then(() => {
+                gapiInited = true;
+                maybeEnableSync();
+            }, (error) => {
+                console.error('Error initializing Google API client:', error);
+            });
+        }
+
+        // Initialize Google Identity Services Client
+        function initializeGisClient() {
+            gisInited = true;
+            maybeEnableSync();
+        }
+
+        function maybeEnableSync() {
+            if (gapiInited && gisInited) {
+                document.getElementById('syncStatus').textContent = "Ready to sync";
+            }
+        }
+
+        // Handle authentication
+        function handleAuthClick() {
+            const tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: (response) => {
+                    if (response.error !== undefined) {
+                        throw response;
+                    }
+                    isSignedIn = true;
+                    document.getElementById('syncStatus').textContent = "Authenticated";
+                    syncToGoogleSheets();
+                },
+            });
+            
+            if (gapi.client.getToken() === null) {
+                tokenClient.requestAccessToken({prompt: 'consent'});
+            } else {
+                tokenClient.requestAccessToken({prompt: ''});
+            }
+        }
+
+        // Real Google Sheets sync function
+        function syncToGoogleSheets() {
+            if (!isSignedIn) {
+                handleAuthClick();
+                return;
+            }
+
+            syncStatus.textContent = "Syncing to Google Sheets...";
+            
+            try {
+                // Prepare the data to send
+                const values = [
+                    ['=== Vehicle Entry Data ===', '', ''],
+                    ['Timestamp', 'Time Slot', 'Formatted Time']
+                ];
+                
+                // Add all entries
+                allEntries.forEach(entry => {
+                    values.push([
+                        entry.timestamp.toISOString(),
+                        entry.timeSlot,
+                        entry.formattedTime
+                    ]);
+                });
+                
+                // Add summary data
+                values.push(['', '', '']);
+                values.push(['=== Hourly Summary ===', '', '']);
+                values.push(['Time Period', 'Count', '']);
+                
+                timePeriods.forEach((period, index) => {
+                    values.push([period, vehicleCounts[index], '']);
+                });
+                
+                values.push(['', '', '']);
+                values.push(['Total Entries', totalEntries, '']);
+                
+                // Send data to Google Sheets
+                gapi.client.sheets.spreadsheets.values.append({
+                    spreadsheetId: SPREADSHEET_ID,
+                    range: 'Sheet1',
+                    valueInputOption: 'RAW',
+                    insertDataOption: 'INSERT_ROWS',
+                    resource: {
+                        values: values
+                    }
+                }).then((response) => {
+                    syncIndicator.className = "sync-indicator sync-active";
+                    syncStatus.textContent = "Synced to Google Sheets at " + new Date().toLocaleTimeString();
+                    
+                    setTimeout(() => {
+                        syncStatus.textContent = "Ready to sync";
+                    }, 3000);
+                }, (error) => {
+                    console.error('Error syncing to Google Sheets:', error);
+                    syncIndicator.className = "sync-indicator sync-inactive";
+                    syncStatus.textContent = "Sync failed - " + (error.result ? error.result.error.message : error.message);
+                });
+            } catch (error) {
+                console.error('Error preparing sync:', error);
+                syncIndicator.className = "sync-indicator sync-inactive";
+                syncStatus.textContent = "Sync preparation failed";
+            }
+        }
+
+        // Load Google API scripts
+        function initializeGoogleSheetsSync() {
+            // Load the Google API client library
+            const script = document.createElement('script');
+            script.src = 'https://apis.google.com/js/api.js';
+            script.onload = () => {
+                gapi.load('client', initializeGapiClient);
+            };
+            script.onerror = () => {
+                console.error('Failed to load Google API client');
+                syncStatus.textContent = "Failed to load Google API";
+            };
+            document.body.appendChild(script);
+            
+            // Load the Google Identity Services library
+            const gisScript = document.createElement('script');
+            gisScript.src = 'https://accounts.google.com/gsi/client';
+            gisScript.onload = initializeGisClient;
+            gisScript.onerror = () => {
+                console.error('Failed to load Google Identity Services');
+                syncStatus.textContent = "Failed to load Google Identity";
+            };
+            document.body.appendChild(gisScript);
+        }
+
     // Extended time periods including late night hours
     const timePeriods = [
         "07:30 - 08:29", "08:30 - 09:29", "09:30 - 10:29",
@@ -757,13 +910,26 @@
         updateChart();
     });
 
-    // Initialize
-    updateTable();
-    updateChart();
-    updateTotalCount();
+   
 
-    // Simulate periodic sync to Google Sheets (every minute)
-    setInterval(simulateGoogleSheetsSync, 60000);
+
+// Initialize the Google Sheets sync when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeGoogleSheetsSync();
+            
+            // [Rest of your existing initialization code]
+            updateTable();
+            updateChart();
+            updateTotalCount();
+
+            // Set up periodic sync (every minute)
+            setInterval(() => {
+                if (allEntries.length > 0) {
+                    syncToGoogleSheets();
+                }
+            }, 60000);
+        });
+
 </script>
 </body>
 </html>
