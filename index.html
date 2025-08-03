@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vehicle Entry Counter</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #f0f2f5;
+            color: #333;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .page-title {
+            text-align: center;
+            padding: 15px 0;
+            background-color: #2c3e50;
+            color: white;
+            font-size: 1.8rem;
+            font-weight: 600;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 20px;
+            background-color: white;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 10px;
+            gap: 20px;
+        }
+
+        .counter-display {
+            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            color: white;
+            border-radius: 8px;
+            padding: 15px 25px;
+            text-align: center;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            width: 250px;
+            height: 100px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            order: 1;
+        }
+
+        .counter-display h2 {
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .counter-value {
+            font-size: 2.2rem;
+            font-weight: 700;
+        }
+
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            order: 2;
+            flex: 1;
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .btn {
+            padding: 0 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            height: 50px;
+        }
+
+        .btn i {
+            font-size: 1.1rem;
+        }
+
+        .btn-primary {
+            background-color: #4CAF50;
+            color: white;
+            width: 250px;
+            height: 100px;
+            order: 3;
+        }
+
+        .btn-primary:hover {
+            background-color: #45a049;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background-color: #f44336;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #d32f2f;
+            transform: translateY(-2px);
+        }
+
+        .btn-tertiary {
+            background-color: #2196F3;
+            color: white;
+        }
+
+        .btn-tertiary:hover {
+            background-color: #0b7dda;
+            transform: translateY(-2px);
+        }
+
+        .sync-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 15px;
+            background-color: #f8f9fa;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            color: #495057;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            width: 100%;
+        }
+
+        .sync-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .sync-active {
+            background-color: #4CAF50;
+            box-shadow: 0 0 8px #4CAF50;
+        }
+
+        .sync-inactive {
+            background-color: #f44336;
+        }
+
+        .main-content {
+            display: flex;
+            height: calc(100% - 180px);
+            padding: 0 10px;
+            gap: 10px;
+        }
+
+        .chart-container {
+            width: 75%;
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .chart-title:hover {
+            color: #2196F3;
+        }
+
+        .chart-wrapper {
+            flex: 1;
+            position: relative;
+        }
+
+        .table-container {
+            width: 25%;
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .table-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .table-title:hover {
+            color: #2196F3;
+        }
+
+        .table-wrapper {
+            flex: 1;
+            overflow: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+            position: sticky;
+            top: 0;
+        }
+
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .current-period {
+            background-color: #e3f2fd;
+            font-weight: 600;
+        }
+
+        @media (max-width: 992px) {
+            .main-content {
+                flex-direction: column;
+                height: auto;
+            }
+            .chart-container, .table-container {
+                width: 100%;
+            }
+            .header {
+                flex-direction: column;
+                align-items: center;
+                gap: 15px;
+            }
+            .counter-display, .btn-primary {
+                width: 100%;
+                height: auto;
+                order: initial;
+            }
+            .button-group {
+                width: 100%;
+                order: initial;
+            }
+            .control-buttons {
+                flex-wrap: wrap;
+            }
+            .btn {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .btn {
+                padding: 14px;
+                font-size: 1rem;
+            }
+            .counter-value {
+                font-size: 2rem;
+            }
+            .page-title {
+                font-size: 1.5rem;
+                padding: 10px 0;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .header {
+                padding: 15px;
+            }
+            .counter-value {
+                font-size: 1.8rem;
+            }
+            .btn {
+                padding: 12px;
+            }
+            .chart-title, .table-title {
+                font-size: 1.1rem;
+            }
+            .page-title {
+                font-size: 1.3rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Page Title -->
+    <div class="page-title">Vehicle Entry Counter</div>
+    
+    <!-- Header with counter and buttons -->
+    <div class="header">
+        <!-- Total Vehicle Entries (Left) -->
+        <div class="counter-display">
+            <h2>TOTAL VEHICLE ENTRIES</h2>
+            <div class="counter-value" id="totalCount">0</div>
+        </div>
+        
+        <!-- Middle Buttons Group -->
+        <div class="button-group">
+            <div class="control-buttons">
+                <button class="btn btn-secondary" id="undoBtn">
+                    <i>↺</i> UNDO
+                </button>
+                <button class="btn btn-tertiary" id="exportBtn">
+                    <i>⇩</i> EXPORT
+                </button>
+            </div>
+            <div class="sync-status">
+                <span class="sync-indicator sync-active" id="syncIndicator"></span>
+                <span id="syncStatus">Syncing to Google Sheets</span>
+            </div>
+        </div>
+        
+        <!-- Entry Button (Right) -->
+        <button class="btn btn-primary" id="entryBtn">
+            <i>⮞</i> ENTRY
+        </button>
+    </div>
+    
+    <!-- Main content area -->
+    <div class="main-content">
+        <!-- Chart container (75%) -->
+        <div class="chart-container">
+            <div class="chart-title" id="chartTitle">Hourly Vehicle Entries (Click to Expand)</div>
+            <div class="chart-wrapper">
+                <canvas id="vehicleChart"></canvas>
+            </div>
+        </div>
+        
+        <!-- Table container (25%) -->
+        <div class="table-container">
+            <div class="table-title" id="tableTitle">Recent Entries (Click to Expand)</div>
+            <div class="table-wrapper" id="tableWrapper">
+                <table id="entryTable">
+                    <thead>
+                        <tr>
+                            <th>Time Period</th>
+                            <th>Count</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <!-- Table rows will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // Extended time periods including late night hours
+    const timePeriods = [
+        "07:30 - 08:29", "08:30 - 09:29", "09:30 - 10:29",
+        "10:30 - 11:29", "11:30 - 12:29", "12:30 - 13:29",
+        "13:30 - 14:29", "14:30 - 15:29", "15:30 - 16:29",
+        "16:30 - 17:29", "17:30 - 18:29", "18:30 - 19:29",
+        "19:30 - 20:29", "20:30 - 21:29", "21:30 - 22:29",
+        "22:30 - 23:29", "23:30 - 00:29", "00:30 - 01:29",
+        "01:30 - 02:29"
+    ];
+
+    // Initialize with zero counts
+    let vehicleCounts = Array(timePeriods.length).fill(0);
+    let totalEntries = 0;
+    let showAllTablePeriods = false;
+    let showAllChartPeriods = false;
+    let firstEntryDate = null;
+    let allEntries = []; // Array to store all individual entries
+
+    // DOM elements
+    const totalCountElement = document.getElementById('totalCount');
+    const tableBody = document.getElementById('tableBody');
+    const tableTitle = document.getElementById('tableTitle');
+    const chartTitle = document.getElementById('chartTitle');
+    const entryBtn = document.getElementById('entryBtn');
+    const undoBtn = document.getElementById('undoBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const syncIndicator = document.getElementById('syncIndicator');
+    const syncStatus = document.getElementById('syncStatus');
+
+    // Initialize Chart.js with horizontal bars
+    const ctx = document.getElementById('vehicleChart').getContext('2d');
+    const vehicleChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: timePeriods,
+            datasets: [{
+                label: 'Vehicles per Time Period',
+                data: vehicleCounts,
+                backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1,
+                borderRadius: 5
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    padding: 10,
+                    titleFont: {
+                        size: 14
+                    },
+                    bodyFont: {
+                        size: 13
+                    },
+                    callbacks: {
+                        label: function(context) {
+                            return `Vehicles: ${context.raw}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    ticks: {
+                        precision: 0,
+                        font: {
+                            size: 12
+                        }
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Number of Vehicles',
+                        font: {
+                            size: 14,
+                            weight: 'bold'
+                        }
+                    }
+                },
+                y: {
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        font: {
+                            size: 12
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Time Period',
+                        font: {
+                            size: 14,
+                            weight: 'bold'
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Function to get current time period index
+    function getCurrentPeriodIndex() {
+        const now = new Date();
+        const hours = now.getHours();
+        const minutes = now.getMinutes();
+        
+        // Handle overnight periods (23:30-02:29)
+        if (hours === 23 && minutes >= 30) return 16;
+        if (hours === 0) {
+            if (minutes < 30) return 16;
+            return 17;
+        }
+        if (hours === 1) {
+            if (minutes < 30) return 17;
+            return 18;
+        }
+        if (hours === 2 && minutes < 30) return 18;
+        
+        // Handle daytime periods (07:30-22:29)
+        if (hours >= 7 && hours < 22) {
+            let periodIndex = hours - 7;
+            if (minutes >= 30) {
+                periodIndex = Math.min(periodIndex + 1, 15);
+            }
+            return periodIndex;
+        }
+        if (hours === 22) {
+            if (minutes < 30) return 14;
+            return 15;
+        }
+        
+        return -1;
+    }
+
+    // Function to update the table
+    function updateTable() {
+        const currentPeriodIndex = getCurrentPeriodIndex();
+        tableBody.innerHTML = '';
+        
+        let periodsToShow = [];
+        if (showAllTablePeriods) {
+            // Show all periods in reverse order
+            for (let i = timePeriods.length - 1; i >= 0; i--) {
+                periodsToShow.push({
+                    period: timePeriods[i],
+                    count: vehicleCounts[i],
+                    isCurrent: i === currentPeriodIndex
+                });
+            }
+        } else {
+            // Show current period and up to 9 previous periods (max 10 rows)
+            const startIndex = Math.max(0, currentPeriodIndex - 9);
+            for (let i = currentPeriodIndex; i >= startIndex; i--) {
+                periodsToShow.push({
+                    period: timePeriods[i],
+                    count: vehicleCounts[i],
+                    isCurrent: i === currentPeriodIndex
+                });
+            }
+        }
+        
+        // Populate the table
+        periodsToShow.forEach(item => {
+            const row = document.createElement('tr');
+            if (item.isCurrent) row.className = 'current-period';
+            row.innerHTML = `
+                <td>${item.period}</td>
+                <td>${item.count}</td>
+            `;
+            tableBody.appendChild(row);
+        });
+        
+        // Update table title
+        tableTitle.textContent = showAllTablePeriods ? 
+            'All Time Periods (Click to Collapse)' : 
+            'Recent Entries (Click to Expand)';
+    }
+
+    // Function to update the chart
+    function updateChart() {
+        const currentPeriodIndex = getCurrentPeriodIndex();
+        
+        if (showAllChartPeriods) {
+            // Show all periods in reverse order
+            vehicleChart.data.labels = [...timePeriods].reverse();
+            vehicleChart.data.datasets[0].data = [...vehicleCounts].reverse();
+        } else {
+            // Show current period and up to 9 previous periods (max 10 rows)
+            const startIndex = Math.max(0, currentPeriodIndex - 9);
+            const periodsToShow = [];
+            const countsToShow = [];
+            
+            for (let i = currentPeriodIndex; i >= startIndex; i--) {
+                periodsToShow.push(timePeriods[i]);
+                countsToShow.push(vehicleCounts[i]);
+            }
+            
+            vehicleChart.data.labels = periodsToShow;
+            vehicleChart.data.datasets[0].data = countsToShow;
+        }
+        
+        // Update chart title
+        chartTitle.textContent = showAllChartPeriods ? 
+            'All Time Periods (Click to Collapse)' : 
+            'Recent Entries (Click to Expand)';
+        
+        vehicleChart.update();
+    }
+
+    // Function to update total count
+    function updateTotalCount() {
+        totalCountElement.textContent = totalEntries;
+    }
+
+    // Helper function to format time as HH:MM:SS
+    function formatTime(date) {
+        return date.toTimeString().substring(0, 8);
+    }
+
+    // Function to add a new entry
+    function addEntry() {
+        const periodIndex = getCurrentPeriodIndex();
+        if (periodIndex === -1) {
+            alert("Outside of counting hours (07:30-02:29)");
+            return;
+        }
+        
+        const now = new Date();
+        vehicleCounts[periodIndex]++;
+        totalEntries++;
+        
+        // Set first entry date if not set
+        if (!firstEntryDate) {
+            firstEntryDate = now;
+        }
+        
+        // Store individual entry
+        allEntries.push({
+            timestamp: now,
+            timeSlot: timePeriods[periodIndex],
+            formattedTime: formatTime(now)
+        });
+        
+        // Update UI
+        updateChart();
+        updateTable();
+        updateTotalCount();
+        simulateGoogleSheetsSync();
+    }
+
+    // Function to undo the last entry
+    function undoEntry() {
+        if (totalEntries > 0 && allEntries.length > 0) {
+            // Remove the last entry
+            const lastEntry = allEntries.pop();
+            const periodIndex = timePeriods.indexOf(lastEntry.timeSlot);
+            
+            if (periodIndex !== -1) {
+                vehicleCounts[periodIndex]--;
+                totalEntries--;
+            }
+            
+            // Update UI
+            updateChart();
+            updateTable();
+            updateTotalCount();
+            simulateGoogleSheetsSync();
+        }
+    }
+
+    // Function to export data to CSV
+    function exportToCSV() {
+        if (allEntries.length === 0) {
+            alert("No data to export");
+            return;
+        }
+        
+        // Prepare data for CSV
+        const data = [];
+        
+        // Add Hourly Summary header
+        data.push(['HOURLY SUMMARY']);
+        data.push(['Time Period', 'Vehicle Count']);
+        
+        // Add hourly summary rows (in reverse chronological order)
+        for (let i = timePeriods.length - 1; i >= 0; i--) {
+            data.push([timePeriods[i], vehicleCounts[i]]);
+        }
+        
+        // Add hourly total row
+        data.push(['', '']);
+        data.push(['Total Entries', totalEntries]);
+        
+        // Add separator
+        data.push(['', '']);
+        data.push(['', '']);
+        data.push(['INDIVIDUAL ENTRIES']);
+        data.push(['Timestamp', 'Time Slot', 'Formatted Time']);
+        
+        // Add individual entries (sorted newest first)
+        allEntries.slice().reverse().forEach(entry => {
+            data.push([
+                entry.timestamp.toISOString(),
+                entry.timeSlot,
+                entry.formattedTime
+            ]);
+        });
+        
+        // Add individual entries total
+        data.push(['', '', '']);
+        data.push(['Total Entries', allEntries.length, '']);
+        
+        // Convert to CSV
+        const csv = Papa.unparse(data);
+        
+        // Create filename based on first entry date
+        const dateString = firstEntryDate.toISOString().slice(0, 10).replace(/-/g, '');
+        const filename = `Vehicle_Entry_${dateString}.csv`;
+        
+        // Create download link
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // Simulate Google Sheets sync
+    function simulateGoogleSheetsSync() {
+        syncStatus.textContent = "Syncing to Google Sheets...";
+        
+        // Simulate network delay
+        setTimeout(() => {
+            syncIndicator.className = "sync-indicator sync-active";
+            syncStatus.textContent = "Synced to Google Sheets";
+            
+            // Reset after 3 seconds
+            setTimeout(() => {
+                syncStatus.textContent = "Syncing to Google Sheets";
+            }, 3000);
+        }, 1000);
+    }
+
+    // Event listeners
+    entryBtn.addEventListener('click', addEntry);
+    undoBtn.addEventListener('click', undoEntry);
+    exportBtn.addEventListener('click', exportToCSV);
+    tableTitle.addEventListener('click', function() {
+        showAllTablePeriods = !showAllTablePeriods;
+        updateTable();
+    });
+    chartTitle.addEventListener('click', function() {
+        showAllChartPeriods = !showAllChartPeriods;
+        updateChart();
+    });
+
+    // Initialize
+    updateTable();
+    updateChart();
+    updateTotalCount();
+
+    // Simulate periodic sync to Google Sheets (every minute)
+    setInterval(simulateGoogleSheetsSync, 60000);
+</script>
+</body>
+</html>
