@@ -6,7 +6,8 @@
     <title>Vehicle Entry Counter</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-    <script defer src="https://apis.google.com/js/api.js"></script>
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script async defer src="https://accounts.google.com/gsi/client"></script>
     <style>
         * {
             margin: 0;
@@ -387,7 +388,7 @@
 
     <script>
     // IMPORTANT: Run this app on a local server (e.g., `python -m http.server 8000`) to avoid CORS issues.
-    // Accessing via `file://` will cause script errors.
+    // Accessing via `file://` will cause errors.
 
     // Google Sheets API configuration
     const CLIENT_ID = '648651517357-duuq9cq6itq8ouanre9r5kersj49t0ij.apps.googleusercontent.com';
@@ -414,7 +415,7 @@
     let showAllChartPeriods = false;
     let firstEntryDate = null;
     let allEntries = []; // Array to store all individual entries
-    let isSignedIn = false;
+    let accessToken = null;
 
     // DOM elements
     const totalCountElement = document.getElementById('totalCount');
@@ -509,35 +510,31 @@
         }
     });
 
-    // Wait for gapi to load with timeout
-    function waitForGapi(attempts = 50) {
+    // Wait for Google Identity Services and gapi to load
+    function waitForGoogleApis(attempts = 50) {
         if (attempts <= 0) {
-            syncStatus.textContent = 'Error: Google API script failed to load';
+            syncStatus.textContent = 'Error: Google APIs failed to load';
             syncIndicator.className = 'sync-indicator sync-inactive';
-            console.error('Google API script failed to load after multiple attempts');
+            console.error('Google APIs failed to load after multiple attempts');
             return;
         }
-        if (typeof gapi !== 'undefined') {
+        if (typeof google !== 'undefined' && typeof gapi !== 'undefined') {
             initClient();
         } else {
-            setTimeout(() => waitForGapi(attempts - 1), 100);
+            setTimeout(() => waitForGoogleApis(attempts - 1), 100);
         }
     }
 
-    // Google API initialization
+    // Initialize Google API client
     function initClient() {
         try {
-            gapi.load('client:auth2', () => {
+            gapi.load('client', () => {
                 gapi.client.init({
                     apiKey: API_KEY,
-                    clientId: CLIENT_ID,
-                    discoveryDocs: DISCOVERY_DOCS,
-                    scope: SCOPES
+                    discoveryDocs: DISCOVERY_DOCS
                 }).then(() => {
-                    // Listen for sign-in state changes
-                    gapi.auth2.getAuthInstance().isSignedIn.listen(updateSigninStatus);
-                    // Handle initial sign-in state
-                    updateSigninStatus(gapi.auth2.getAuthInstance().isSignedIn.get());
+                    // Initialize Google Identity Services
+                    initGoogleSignIn();
                 }).catch(error => {
                     console.error('Error initializing Google API client:', error);
                     syncStatus.textContent = `Google API init failed: ${error.details || error.message || 'Unknown error'}`;
@@ -545,36 +542,49 @@
                 });
             });
         } catch (error) {
-            console.error('Error loading gapi client:auth2:', error);
+            console.error('Error loading gapi client:', error);
             syncStatus.textContent = 'Google API load failed';
             syncIndicator.className = 'sync-indicator sync-inactive';
         }
     }
 
-    // Handle sign-in state changes
-    function updateSigninStatus(isSignedInStatus) {
-        isSignedIn = isSignedInStatus;
-        if (isSignedIn) {
-            syncStatus.textContent = 'Connected to Google Sheets';
-            syncIndicator.className = 'sync-indicator sync-active';
-            syncToGoogleSheets();
-        } else {
-            syncStatus.textContent = 'Please sign in to Google';
+    // Initialize Google Identity Services
+    function initGoogleSignIn() {
+        try {
+            google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: (tokenResponse) => {
+                    if (tokenResponse && tokenResponse.access_token) {
+                        accessToken = tokenResponse.access_token;
+                        syncStatus.textContent = 'Connected to Google Sheets';
+                        syncIndicator.className = 'sync-indicator sync-active';
+                        syncToGoogleSheets();
+                    } else {
+                        console.error('Authentication failed: No access token received');
+                        syncStatus.textContent = 'Authentication failed';
+                        syncIndicator.className = 'sync-indicator sync-inactive';
+                    }
+                },
+                error_callback: (error) => {
+                    console.error('Google Sign-In error:', error);
+                    syncStatus.textContent = `Sign-in failed: ${error.message || 'Unknown error'}`;
+                    syncIndicator.className = 'sync-indicator sync-inactive';
+                }
+            }).requestAccessToken();
+        } catch (error) {
+            console.error('Error initializing Google Sign-In:', error);
+            syncStatus.textContent = 'Sign-in initialization failed';
             syncIndicator.className = 'sync-indicator sync-inactive';
-            // Attempt to sign in
-            gapi.auth2.getAuthInstance().signIn().catch(error => {
-                console.error('Sign-in failed:', error);
-                syncStatus.textContent = `Sign-in failed: ${error.error || error.message || 'Unknown error'}`;
-                syncIndicator.className = 'sync-indicator sync-inactive';
-            });
         }
     }
 
     // Function to sync data to Google Sheets
     function syncToGoogleSheets() {
-        if (!isSignedIn) {
+        if (!accessToken) {
             syncStatus.textContent = 'Not signed in';
             syncIndicator.className = 'sync-indicator sync-inactive';
+            initGoogleSignIn();
             return;
         }
 
@@ -619,6 +629,11 @@
                 console.error('Error syncing to Google Sheets:', error);
                 syncStatus.textContent = `Sync failed: ${error.result?.error?.message || error.message || 'Unknown error'}`;
                 syncIndicator.className = 'sync-indicator sync-inactive';
+                // Attempt to re-authenticate if token is invalid
+                if (error.result?.error?.status === 'UNAUTHENTICATED') {
+                    accessToken = null;
+                    initGoogleSignIn();
+                }
             });
         } catch (error) {
             console.error('Error preparing sync request:', error);
@@ -627,7 +642,7 @@
         }
     }
 
-    // Function to get current time period index (adjusted for HKT)
+    // Function to get current time period index (HKT)
     function getCurrentPeriodIndex() {
         const now = new Date();
         const hours = now.getHours();
@@ -859,11 +874,11 @@
     updateTable();
     updateChart();
     updateTotalCount();
-    waitForGapi();
+    waitForGoogleApis();
 
-    // Sync to Google Sheets every minute if signed in
+    // Sync to Google Sheets every minute if authenticated
     setInterval(() => {
-        if (isSignedIn) {
+        if (accessToken) {
             syncToGoogleSheets();
         }
     }, 60000);
