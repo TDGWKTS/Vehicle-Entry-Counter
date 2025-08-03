@@ -403,7 +403,7 @@
     // IMPORTANT: Ensure https://tdgwkts.github.io and https://tdgwkts.github.io/Vehicle-Entry-Counter are added to
     // "Authorized JavaScript origins" in Google Cloud Console -> APIs & Services -> Credentials -> OAuth 2.0 Client ID.
     // Share the Google Sheet (ID: 1JwcmXZuC935CFWrsbSZPh4na39LQKlOqPJTO-YrkjA8) with edit access to your Google account.
-    // Allow popups for https://tdgwkts.github.io in your browser settings.
+    // Ensure the Google Sheet has a tab named "Sheet1". Allow popups for https://tdgwkts.github.io in your browser settings.
 
     // Google Sheets API configuration
     const CLIENT_ID = '648651517357-duuq9cq6itq8ouanre9r5kersj49t0ij.apps.googleusercontent.com';
@@ -697,6 +697,41 @@
             alert('Data exported as CSV');
         }
 
+        // Function to ensure Sheet1 exists
+        async function ensureSheetExists() {
+            if (!accessToken) {
+                syncStatus.textContent = 'Not signed in';
+                syncIndicator.className = 'sync-indicator sync-inactive';
+                return false;
+            }
+            try {
+                const response = await gapi.client.sheets.spreadsheets.get({
+                    spreadsheetId: SPREADSHEET_ID
+                });
+                const sheets = response.result.sheets;
+                const sheet1Exists = sheets.some(sheet => sheet.properties.title === 'Sheet1');
+                if (!sheet1Exists) {
+                    await gapi.client.sheets.spreadsheets.batchUpdate({
+                        spreadsheetId: SPREADSHEET_ID,
+                        requests: [{
+                            addSheet: {
+                                properties: {
+                                    title: 'Sheet1'
+                                }
+                            }
+                        }]
+                    });
+                    console.log('Created Sheet1');
+                }
+                return true;
+            } catch (error) {
+                console.error('Error checking/creating Sheet1:', error);
+                syncStatus.textContent = `Cannot access spreadsheet: ${error.result?.error?.message || error.message || 'Unknown error'}. Verify spreadsheet ID and permissions.`;
+                syncIndicator.className = 'sync-indicator sync-inactive';
+                return false;
+            }
+        }
+
         // Wait for Google Identity Services and gapi to load
         function waitForGoogleApis(attempts = 50) {
             if (attempts <= 0) {
@@ -772,35 +807,36 @@
         }
 
         // Check spreadsheet access
-        function checkSpreadsheetAccess() {
+        async function checkSpreadsheetAccess() {
             if (!accessToken) {
                 syncStatus.textContent = 'Not signed in';
                 syncIndicator.className = 'sync-indicator sync-inactive';
                 return;
             }
             try {
-                gapi.client.sheets.spreadsheets.get({
+                await gapi.client.sheets.spreadsheets.get({
                     spreadsheetId: SPREADSHEET_ID
-                }).then(response => {
-                    syncToGoogleSheets();
-                }).catch(error => {
-                    console.error('Error accessing spreadsheet:', error);
-                    syncStatus.textContent = `Cannot access spreadsheet: ${error.result?.error?.message || error.message || 'Unknown error'}. Share the sheet with your Google account.`;
-                    syncIndicator.className = 'sync-indicator sync-inactive';
                 });
+                if (await ensureSheetExists()) {
+                    syncToGoogleSheets();
+                }
             } catch (error) {
-                console.error('Error checking spreadsheet access:', error);
-                syncStatus.textContent = `Access check failed: ${error.message || 'Unknown error'}`;
+                console.error('Error accessing spreadsheet:', error);
+                syncStatus.textContent = `Cannot access spreadsheet: ${error.result?.error?.message || error.message || 'Unknown error'}. Share the sheet with your Google account.`;
                 syncIndicator.className = 'sync-indicator sync-inactive';
             }
         }
 
         // Function to sync data to Google Sheets
-        function syncToGoogleSheets() {
+        async function syncToGoogleSheets() {
             if (!accessToken) {
                 syncStatus.textContent = 'Not signed in';
                 syncIndicator.className = 'sync-indicator sync-inactive';
                 initGoogleSignIn();
+                return;
+            }
+
+            if (!(await ensureSheetExists())) {
                 return;
             }
 
@@ -826,35 +862,30 @@
             ];
 
             try {
-                gapi.client.sheets.spreadsheets.values.update({
+                await gapi.client.sheets.spreadsheets.values.update({
                     spreadsheetId: SPREADSHEET_ID,
                     range: 'Sheet1!A1',
                     valueInputOption: 'RAW',
                     resource: { values }
-                }).then(response => {
-                    syncStatus.textContent = 'Synced to Google Sheets';
-                    syncIndicator.className = 'sync-indicator sync-active';
-                    setTimeout(() => {
-                        syncStatus.textContent = 'Connected to Google Sheets';
-                    }, 3000);
-                }).catch(error => {
-                    console.error('Error syncing to Google Sheets:', error);
-                    let errorMessage = error.result?.error?.message || error.message || 'Unknown error';
-                    if (error.result?.error?.status === 'PERMISSION_DENIED') {
-                        errorMessage = 'Permission denied. Share the spreadsheet with your Google account.';
-                    } else if (error.result?.error?.status === 'UNAUTHENTICATED') {
-                        accessToken = null;
-                        errorMessage = 'Authentication expired. Click Sign In and allow popups.';
-                        initGoogleSignIn();
-                    } else if (error.result?.error?.status === 'INVALID_ARGUMENT') {
-                        errorMessage = 'Invalid request. Check spreadsheet ID and range.';
-                    }
-                    syncStatus.textContent = `Sync failed: ${errorMessage}`;
-                    syncIndicator.className = 'sync-indicator sync-inactive';
                 });
+                syncStatus.textContent = 'Synced to Google Sheets';
+                syncIndicator.className = 'sync-indicator sync-active';
+                setTimeout(() => {
+                    syncStatus.textContent = 'Connected to Google Sheets';
+                }, 3000);
             } catch (error) {
-                console.error('Error preparing sync request:', error);
-                syncStatus.textContent = `Sync error: ${error.message || 'Unknown error'}`;
+                console.error('Error syncing to Google Sheets:', error);
+                let errorMessage = error.result?.error?.message || error.message || 'Unknown error';
+                if (error.result?.error?.status === 'PERMISSION_DENIED') {
+                    errorMessage = 'Permission denied. Share the spreadsheet with your Google account.';
+                } else if (error.result?.error?.status === 'UNAUTHENTICATED') {
+                    accessToken = null;
+                    errorMessage = 'Authentication expired. Click Sign In and allow popups.';
+                    initGoogleSignIn();
+                } else if (error.result?.error?.status === 'INVALID_ARGUMENT') {
+                    errorMessage = 'Invalid request. Ensure the spreadsheet has a tab named "Sheet1" and verify the spreadsheet ID.';
+                }
+                syncStatus.textContent = `Sync failed: ${errorMessage}`;
                 syncIndicator.className = 'sync-indicator sync-inactive';
             }
         }
