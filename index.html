@@ -6,7 +6,7 @@
     <title>Vehicle Entry Counter</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-    <script src="https://apis.google.com/js/api.js"></script>
+    <script async defer src="https://apis.google.com/js/api.js"></script>
     <script async defer src="https://accounts.google.com/gsi/client"></script>
     <style>
         * {
@@ -387,8 +387,8 @@
     </div>
 
     <script>
-    // IMPORTANT: Run this app on a local server (e.g., `python -m http.server 8000`) to avoid CORS issues.
-    // Accessing via `file://` will cause errors.
+    // IMPORTANT: Ensure your GitHub Pages URL (e.g., https://<username>.github.io/vehicle-counter) is added to
+    // "Authorized JavaScript origins" in Google Cloud Console -> APIs & Services -> Credentials -> OAuth 2.0 Client ID.
 
     // Google Sheets API configuration
     const CLIENT_ID = '648651517357-duuq9cq6itq8ouanre9r5kersj49t0ij.apps.googleusercontent.com';
@@ -397,7 +397,7 @@
     const DISCOVERY_DOCS = ['https://sheets.googleapis.com/$discovery/rest?version=v4'];
     const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
 
-    // Extended time periods including late night hours
+    // Extended time periods including late night hours (HKT)
     const timePeriods = [
         "07:30 - 08:29", "08:30 - 09:29", "09:30 - 10:29",
         "10:30 - 11:29", "11:30 - 12:29", "12:30 - 13:29",
@@ -416,6 +416,7 @@
     let firstEntryDate = null;
     let allEntries = []; // Array to store all individual entries
     let accessToken = null;
+    let tokenClient = null;
 
     // DOM elements
     const totalCountElement = document.getElementById('totalCount');
@@ -551,12 +552,14 @@
     // Initialize Google Identity Services
     function initGoogleSignIn() {
         try {
-            google.accounts.oauth2.initTokenClient({
+            tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID,
                 scope: SCOPES,
                 callback: (tokenResponse) => {
                     if (tokenResponse && tokenResponse.access_token) {
                         accessToken = tokenResponse.access_token;
+                        // Set the access token for gapi client
+                        gapi.client.setToken({ access_token: accessToken });
                         syncStatus.textContent = 'Connected to Google Sheets';
                         syncIndicator.className = 'sync-indicator sync-active';
                         syncToGoogleSheets();
@@ -571,7 +574,9 @@
                     syncStatus.textContent = `Sign-in failed: ${error.message || 'Unknown error'}`;
                     syncIndicator.className = 'sync-indicator sync-inactive';
                 }
-            }).requestAccessToken();
+            });
+            // Request access token
+            tokenClient.requestAccessToken();
         } catch (error) {
             console.error('Error initializing Google Sign-In:', error);
             syncStatus.textContent = 'Sign-in initialization failed';
@@ -629,7 +634,7 @@
                 console.error('Error syncing to Google Sheets:', error);
                 syncStatus.textContent = `Sync failed: ${error.result?.error?.message || error.message || 'Unknown error'}`;
                 syncIndicator.className = 'sync-indicator sync-inactive';
-                // Attempt to re-authenticate if token is invalid
+                // Re-authenticate if token is invalid
                 if (error.result?.error?.status === 'UNAUTHENTICATED') {
                     accessToken = null;
                     initGoogleSignIn();
