@@ -386,191 +386,216 @@
 
     <script>
 
+ // Google API Configuration
+const SPREADSHEET_ID = '1JwcmXZuC935CFWrsbSZPh4na39LQKlOqPJTO-YrkjA8';
+const CLIENT_ID = '648651517357-duuq9cq6itq8ouanre9r5kersj49t0ij.apps.googleusercontent.com';
+const API_KEY = 'AIzaSyCnDPtA_eNCd1BTH0mmyoOj-rOnxrxJ0sg';
+const DISCOVERY_DOCS = ["https://sheets.googleapis.com/$discovery/rest?version=v4"];
+const SCOPES = "https://www.googleapis.com/auth/spreadsheets";
 
- // Google API Configuration with your credentials
-        const SPREADSHEET_ID = '1JwcmXZuC935CFWrsbSZPh4na39LQKlOqPJTO-YrkjA8';
-        const CLIENT_ID = '648651517357-duuq9cq6itq8ouanre9r5kersj49t0ij.apps.googleusercontent.com';
-        const API_KEY = 'AIzaSyCnDPtA_eNCd1BTH0mmyoOj-rOnxrxJ0sg';
-        const DISCOVERY_DOCS = ["https://sheets.googleapis.com/$discovery/rest?version=v4"];
-        const SCOPES = "https://www.googleapis.com/auth/spreadsheets";
+// Application State
+let isSignedIn = false;
+let gapiInited = false;
+let gisInited = false;
+const timePeriods = [
+    "07:30 - 08:29", "08:30 - 09:29", "09:30 - 10:29",
+    "10:30 - 11:29", "11:30 - 12:29", "12:30 - 13:29",
+    "13:30 - 14:29", "14:30 - 15:29", "15:30 - 16:29",
+    "16:30 - 17:29", "17:30 - 18:29", "18:30 - 19:29",
+    "19:30 - 20:29", "20:30 - 21:29", "21:30 - 22:29",
+    "22:30 - 23:29", "23:30 - 00:29", "00:30 - 01:29",
+    "01:30 - 02:29"
+];
+let vehicleCounts = Array(timePeriods.length).fill(0);
+let totalEntries = 0;
+let showAllTablePeriods = false;
+let showAllChartPeriods = false;
+let firstEntryDate = null;
+let allEntries = [];
+let vehicleChart;
 
-        // [All your existing variable declarations remain the same]
-        let isSignedIn = false;
-        let gapiInited = false;
-        let gisInited = false;
+// DOM Elements
+const totalCountElement = document.getElementById('totalCount');
+const tableBody = document.getElementById('tableBody');
+const tableTitle = document.getElementById('tableTitle');
+const chartTitle = document.getElementById('chartTitle');
+const entryBtn = document.getElementById('entryBtn');
+const undoBtn = document.getElementById('undoBtn');
+const exportBtn = document.getElementById('exportBtn');
+const syncIndicator = document.getElementById('syncIndicator');
+const syncStatus = document.getElementById('syncStatus');
 
-        // Initialize Google API Client
-        function initializeGapiClient() {
-            gapi.client.init({
-                apiKey: API_KEY,
-                clientId: CLIENT_ID,
-                discoveryDocs: DISCOVERY_DOCS,
-                scope: SCOPES
-            }).then(() => {
-                gapiInited = true;
-                maybeEnableSync();
-            }, (error) => {
-                console.error('Error initializing Google API client:', error);
-            });
-        }
-
-        // Initialize Google Identity Services Client
-        function initializeGisClient() {
-            gisInited = true;
-            maybeEnableSync();
-        }
-
-        function maybeEnableSync() {
-            if (gapiInited && gisInited) {
-                document.getElementById('syncStatus').textContent = "Ready to sync";
+// Initialize the application
+async function initializeApp() {
+    try {
+        // Load from localStorage if available
+        loadFromLocalStorage();
+        
+        // Initialize Google APIs
+        await initializeGoogleSheetsSync();
+        
+        // Initialize Chart
+        initializeChart();
+        
+        // Update UI
+        updateUI();
+        
+        // Set up periodic sync (every minute)
+        setInterval(() => {
+            if (allEntries.length > 0 && isSignedIn) {
+                syncToGoogleSheets();
             }
-        }
+        }, 60000);
+        
+    } catch (error) {
+        console.error('Initialization failed:', error);
+        updateSyncStatus("Initialization failed - " + error.message, true);
+    }
+}
 
-        // Handle authentication
-        function handleAuthClick() {
-            const tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: CLIENT_ID,
-                scope: SCOPES,
-                callback: (response) => {
-                    if (response.error !== undefined) {
-                        throw response;
-                    }
-                    isSignedIn = true;
-                    document.getElementById('syncStatus').textContent = "Authenticated";
-                    syncToGoogleSheets();
+// Google Sheets Integration
+function initializeGoogleSheetsSync() {
+    return new Promise((resolve, reject) => {
+        // Load Google API client library
+        const gapiScript = document.createElement('script');
+        gapiScript.src = 'https://apis.google.com/js/api.js';
+        gapiScript.onload = () => {
+            gapi.load('client', {
+                callback: () => {
+                    gapi.client.init({
+                        apiKey: API_KEY,
+                        clientId: CLIENT_ID,
+                        discoveryDocs: DISCOVERY_DOCS,
+                        scope: SCOPES
+                    }).then(() => {
+                        gapiInited = true;
+                        updateSyncStatus("Ready to sync");
+                        resolve();
+                    }).catch(error => {
+                        console.error('GAPI init error:', error);
+                        reject(error);
+                    });
                 },
+                onerror: () => {
+                    reject(new Error('Failed to load GAPI client'));
+                }
             });
-            
-            if (gapi.client.getToken() === null) {
-                tokenClient.requestAccessToken({prompt: 'consent'});
-            } else {
-                tokenClient.requestAccessToken({prompt: ''});
-            }
+        };
+        gapiScript.onerror = () => reject(new Error('Failed to load Google API script'));
+        document.body.appendChild(gapiScript);
+        
+        // Load Google Identity Services
+        const gisScript = document.createElement('script');
+        gisScript.src = 'https://accounts.google.com/gsi/client';
+        gisScript.onload = () => {
+            gisInited = true;
+            resolve();
+        };
+        gisScript.onerror = () => reject(new Error('Failed to load Google Identity Services'));
+        document.body.appendChild(gisScript);
+    });
+}
+
+async function handleAuthClick() {
+    try {
+        const tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: CLIENT_ID,
+            scope: SCOPES,
+            callback: async (response) => {
+                if (response.error) {
+                    throw response;
+                }
+                isSignedIn = true;
+                updateSyncStatus("Authenticated");
+                await syncToGoogleSheets();
+            },
+        });
+
+        if (gapi.client.getToken() === null) {
+            tokenClient.requestAccessToken({prompt: 'consent'});
+        } else {
+            tokenClient.requestAccessToken({prompt: ''});
         }
+    } catch (error) {
+        console.error('Auth error:', error);
+        updateSyncStatus("Auth failed - " + (error.error || error.message), true);
+    }
+}
 
-        // Real Google Sheets sync function
-        function syncToGoogleSheets() {
-            if (!isSignedIn) {
-                handleAuthClick();
-                return;
-            }
+async function syncToGoogleSheets() {
+    if (!isSignedIn) {
+        await handleAuthClick();
+        return;
+    }
 
-            syncStatus.textContent = "Syncing to Google Sheets...";
-            
-            try {
-                // Prepare the data to send
-                const values = [
-                    ['=== Vehicle Entry Data ===', '', ''],
-                    ['Timestamp', 'Time Slot', 'Formatted Time']
-                ];
-                
-                // Add all entries
-                allEntries.forEach(entry => {
-                    values.push([
-                        entry.timestamp.toISOString(),
-                        entry.timeSlot,
-                        entry.formattedTime
-                    ]);
-                });
-                
-                // Add summary data
-                values.push(['', '', '']);
-                values.push(['=== Hourly Summary ===', '', '']);
-                values.push(['Time Period', 'Count', '']);
-                
-                timePeriods.forEach((period, index) => {
-                    values.push([period, vehicleCounts[index], '']);
-                });
-                
-                values.push(['', '', '']);
-                values.push(['Total Entries', totalEntries, '']);
-                
-                // Send data to Google Sheets
-                gapi.client.sheets.spreadsheets.values.append({
-                    spreadsheetId: SPREADSHEET_ID,
-                    range: 'Sheet1',
-                    valueInputOption: 'RAW',
-                    insertDataOption: 'INSERT_ROWS',
-                    resource: {
-                        values: values
-                    }
-                }).then((response) => {
-                    syncIndicator.className = "sync-indicator sync-active";
-                    syncStatus.textContent = "Synced to Google Sheets at " + new Date().toLocaleTimeString();
-                    
-                    setTimeout(() => {
-                        syncStatus.textContent = "Ready to sync";
-                    }, 3000);
-                }, (error) => {
-                    console.error('Error syncing to Google Sheets:', error);
-                    syncIndicator.className = "sync-indicator sync-inactive";
-                    syncStatus.textContent = "Sync failed - " + (error.result ? error.result.error.message : error.message);
-                });
-            } catch (error) {
-                console.error('Error preparing sync:', error);
-                syncIndicator.className = "sync-indicator sync-inactive";
-                syncStatus.textContent = "Sync preparation failed";
-            }
+    try {
+        updateSyncStatus("Syncing to Google Sheets...");
+        
+        // Prepare the data to send
+        const values = [
+            ['=== Vehicle Entry Data ===', '', ''],
+            ['Timestamp', 'Time Slot', 'Formatted Time'],
+            ...allEntries.map(entry => [
+                entry.timestamp.toISOString(),
+                entry.timeSlot,
+                entry.formattedTime
+            ]),
+            ['', '', ''],
+            ['=== Hourly Summary ===', '', ''],
+            ['Time Period', 'Count', ''],
+            ...timePeriods.map((period, index) => [period, vehicleCounts[index], '']),
+            ['', '', ''],
+            ['Total Entries', totalEntries, '']
+        ];
+        
+        // Send data to Google Sheets
+        const response = await gapi.client.sheets.spreadsheets.values.append({
+            spreadsheetId: SPREADSHEET_ID,
+            range: 'Sheet1',
+            valueInputOption: 'RAW',
+            insertDataOption: 'INSERT_ROWS',
+            resource: { values }
+        });
+        
+        updateSyncStatus(`Synced at ${new Date().toLocaleTimeString()}`);
+        saveToLocalStorage();
+        
+    } catch (error) {
+        let errorMessage = error.result?.error?.message || error.message;
+        updateSyncStatus("Sync failed - " + errorMessage, true);
+        
+        // If token expired, try to re-authenticate
+        if (errorMessage.includes("token") || errorMessage.includes("auth")) {
+            isSignedIn = false;
+            setTimeout(() => syncToGoogleSheets(), 2000);
         }
+    }
+}
 
-        // Load Google API scripts
-        function initializeGoogleSheetsSync() {
-            // Load the Google API client library
-            const script = document.createElement('script');
-            script.src = 'https://apis.google.com/js/api.js';
-            script.onload = () => {
-                gapi.load('client', initializeGapiClient);
-            };
-            script.onerror = () => {
-                console.error('Failed to load Google API client');
-                syncStatus.textContent = "Failed to load Google API";
-            };
-            document.body.appendChild(script);
-            
-            // Load the Google Identity Services library
-            const gisScript = document.createElement('script');
-            gisScript.src = 'https://accounts.google.com/gsi/client';
-            gisScript.onload = initializeGisClient;
-            gisScript.onerror = () => {
-                console.error('Failed to load Google Identity Services');
-                syncStatus.textContent = "Failed to load Google Identity";
-            };
-            document.body.appendChild(gisScript);
-        }
+// Local Storage Functions
+function saveToLocalStorage() {
+    localStorage.setItem('vehicleCounterData', JSON.stringify({
+        counts: vehicleCounts,
+        total: totalEntries,
+        entries: allEntries,
+        firstDate: firstEntryDate
+    }));
+}
 
-    // Extended time periods including late night hours
-    const timePeriods = [
-        "07:30 - 08:29", "08:30 - 09:29", "09:30 - 10:29",
-        "10:30 - 11:29", "11:30 - 12:29", "12:30 - 13:29",
-        "13:30 - 14:29", "14:30 - 15:29", "15:30 - 16:29",
-        "16:30 - 17:29", "17:30 - 18:29", "18:30 - 19:29",
-        "19:30 - 20:29", "20:30 - 21:29", "21:30 - 22:29",
-        "22:30 - 23:29", "23:30 - 00:29", "00:30 - 01:29",
-        "01:30 - 02:29"
-    ];
+function loadFromLocalStorage() {
+    const data = JSON.parse(localStorage.getItem('vehicleCounterData'));
+    if (data) {
+        vehicleCounts = data.counts || vehicleCounts;
+        totalEntries = data.total || totalEntries;
+        allEntries = data.entries || allEntries;
+        firstEntryDate = data.firstDate ? new Date(data.firstDate) : null;
+    }
+}
 
-    // Initialize with zero counts
-    let vehicleCounts = Array(timePeriods.length).fill(0);
-    let totalEntries = 0;
-    let showAllTablePeriods = false;
-    let showAllChartPeriods = false;
-    let firstEntryDate = null;
-    let allEntries = []; // Array to store all individual entries
-
-    // DOM elements
-    const totalCountElement = document.getElementById('totalCount');
-    const tableBody = document.getElementById('tableBody');
-    const tableTitle = document.getElementById('tableTitle');
-    const chartTitle = document.getElementById('chartTitle');
-    const entryBtn = document.getElementById('entryBtn');
-    const undoBtn = document.getElementById('undoBtn');
-    const exportBtn = document.getElementById('exportBtn');
-    const syncIndicator = document.getElementById('syncIndicator');
-    const syncStatus = document.getElementById('syncStatus');
-
-    // Initialize Chart.js with horizontal bars
+// Chart Functions
+function initializeChart() {
     const ctx = document.getElementById('vehicleChart').getContext('2d');
-    const vehicleChart = new Chart(ctx, {
+    vehicleChart = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: timePeriods,
@@ -588,18 +613,12 @@
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: {
-                    display: false
-                },
+                legend: { display: false },
                 tooltip: {
                     backgroundColor: 'rgba(0, 0, 0, 0.8)',
                     padding: 10,
-                    titleFont: {
-                        size: 14
-                    },
-                    bodyFont: {
-                        size: 13
-                    },
+                    titleFont: { size: 14 },
+                    bodyFont: { size: 13 },
                     callbacks: {
                         label: function(context) {
                             return `Vehicles: ${context.raw}`;
@@ -610,325 +629,212 @@
             scales: {
                 x: {
                     beginAtZero: true,
-                    ticks: {
-                        precision: 0,
-                        font: {
-                            size: 12
-                        }
-                    },
-                    grid: {
-                        color: 'rgba(0, 0, 0, 0.05)'
-                    },
+                    ticks: { precision: 0, font: { size: 12 } },
+                    grid: { color: 'rgba(0, 0, 0, 0.05)' },
                     title: {
                         display: true,
                         text: 'Number of Vehicles',
-                        font: {
-                            size: 14,
-                            weight: 'bold'
-                        }
+                        font: { size: 14, weight: 'bold' }
                     }
                 },
                 y: {
-                    grid: {
-                        display: false
-                    },
-                    ticks: {
-                        font: {
-                            size: 12
-                        }
-                    },
+                    grid: { display: false },
+                    ticks: { font: { size: 12 } },
                     title: {
                         display: true,
                         text: 'Time Period',
-                        font: {
-                            size: 14,
-                            weight: 'bold'
-                        }
+                        font: { size: 14, weight: 'bold' }
                     }
                 }
             }
         }
     });
+}
 
-    // Function to get current time period index
-    function getCurrentPeriodIndex() {
-        const now = new Date();
-        const hours = now.getHours();
-        const minutes = now.getMinutes();
-        
-        // Handle overnight periods (23:30-02:29)
-        if (hours === 23 && minutes >= 30) return 16;
-        if (hours === 0) {
-            if (minutes < 30) return 16;
-            return 17;
-        }
-        if (hours === 1) {
-            if (minutes < 30) return 17;
-            return 18;
-        }
-        if (hours === 2 && minutes < 30) return 18;
-        
-        // Handle daytime periods (07:30-22:29)
-        if (hours >= 7 && hours < 22) {
-            let periodIndex = hours - 7;
-            if (minutes >= 30) {
-                periodIndex = Math.min(periodIndex + 1, 15);
-            }
-            return periodIndex;
-        }
-        if (hours === 22) {
-            if (minutes < 30) return 14;
-            return 15;
-        }
-        
-        return -1;
+// Core Application Functions
+function getCurrentPeriodIndex() {
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    
+    if (hours === 23 && minutes >= 30) return 16;
+    if (hours === 0) return minutes < 30 ? 16 : 17;
+    if (hours === 1) return minutes < 30 ? 17 : 18;
+    if (hours === 2 && minutes < 30) return 18;
+    
+    if (hours >= 7 && hours < 22) {
+        return minutes >= 30 ? Math.min(hours - 6, 15) : Math.max(hours - 7, 0);
     }
+    if (hours === 22) return minutes < 30 ? 14 : 15;
+    
+    return -1;
+}
 
-    // Function to update the table
-    function updateTable() {
-        const currentPeriodIndex = getCurrentPeriodIndex();
-        tableBody.innerHTML = '';
+function updateUI() {
+    updateChart();
+    updateTable();
+    updateTotalCount();
+}
+
+function updateTable() {
+    const currentPeriodIndex = getCurrentPeriodIndex();
+    tableBody.innerHTML = '';
+    
+    const periodsToShow = showAllTablePeriods 
+        ? Array.from({ length: timePeriods.length }, (_, i) => ({
+            period: timePeriods[i],
+            count: vehicleCounts[i],
+            isCurrent: i === currentPeriodIndex
+        })).reverse()
+        : Array.from({ length: Math.min(10, currentPeriodIndex + 1) }, (_, i) => ({
+            period: timePeriods[currentPeriodIndex - i],
+            count: vehicleCounts[currentPeriodIndex - i],
+            isCurrent: (currentPeriodIndex - i) === currentPeriodIndex
+        }));
+    
+    periodsToShow.forEach(item => {
+        const row = document.createElement('tr');
+        if (item.isCurrent) row.className = 'current-period';
+        row.innerHTML = `<td>${item.period}</td><td>${item.count}</td>`;
+        tableBody.appendChild(row);
+    });
+    
+    tableTitle.textContent = showAllTablePeriods 
+        ? 'All Time Periods (Click to Collapse)' 
+        : 'Recent Entries (Click to Expand)';
+}
+
+function updateChart() {
+    const currentPeriodIndex = getCurrentPeriodIndex();
+    
+    if (showAllChartPeriods) {
+        vehicleChart.data.labels = [...timePeriods].reverse();
+        vehicleChart.data.datasets[0].data = [...vehicleCounts].reverse();
+    } else {
+        const startIndex = Math.max(0, currentPeriodIndex - 9);
+        vehicleChart.data.labels = timePeriods.slice(startIndex, currentPeriodIndex + 1).reverse();
+        vehicleChart.data.datasets[0].data = vehicleCounts.slice(startIndex, currentPeriodIndex + 1).reverse();
+    }
+    
+    chartTitle.textContent = showAllChartPeriods 
+        ? 'All Time Periods (Click to Collapse)' 
+        : 'Recent Entries (Click to Expand)';
+    
+    vehicleChart.update();
+}
+
+function updateTotalCount() {
+    totalCountElement.textContent = totalEntries;
+}
+
+function updateSyncStatus(message, isError = false) {
+    syncStatus.textContent = message;
+    syncIndicator.className = `sync-indicator ${isError ? 'sync-inactive' : 'sync-active'}`;
+}
+
+function formatTime(date) {
+    return date.toTimeString().substring(0, 8);
+}
+
+// Entry Management
+function addEntry() {
+    const periodIndex = getCurrentPeriodIndex();
+    if (periodIndex === -1) {
+        alert("Outside of counting hours (07:30-02:29)");
+        return;
+    }
+    
+    const now = new Date();
+    vehicleCounts[periodIndex]++;
+    totalEntries++;
+    
+    if (!firstEntryDate) {
+        firstEntryDate = now;
+    }
+    
+    allEntries.push({
+        timestamp: now,
+        timeSlot: timePeriods[periodIndex],
+        formattedTime: formatTime(now)
+    });
+    
+    updateUI();
+    syncToGoogleSheets();
+    saveToLocalStorage();
+}
+
+function undoEntry() {
+    if (totalEntries > 0 && allEntries.length > 0) {
+        const lastEntry = allEntries.pop();
+        const periodIndex = timePeriods.indexOf(lastEntry.timeSlot);
         
-        let periodsToShow = [];
-        if (showAllTablePeriods) {
-            // Show all periods in reverse order
-            for (let i = timePeriods.length - 1; i >= 0; i--) {
-                periodsToShow.push({
-                    period: timePeriods[i],
-                    count: vehicleCounts[i],
-                    isCurrent: i === currentPeriodIndex
-                });
-            }
-        } else {
-            // Show current period and up to 9 previous periods (max 10 rows)
-            const startIndex = Math.max(0, currentPeriodIndex - 9);
-            for (let i = currentPeriodIndex; i >= startIndex; i--) {
-                periodsToShow.push({
-                    period: timePeriods[i],
-                    count: vehicleCounts[i],
-                    isCurrent: i === currentPeriodIndex
-                });
-            }
+        if (periodIndex !== -1) {
+            vehicleCounts[periodIndex]--;
+            totalEntries--;
         }
         
-        // Populate the table
-        periodsToShow.forEach(item => {
-            const row = document.createElement('tr');
-            if (item.isCurrent) row.className = 'current-period';
-            row.innerHTML = `
-                <td>${item.period}</td>
-                <td>${item.count}</td>
-            `;
-            tableBody.appendChild(row);
-        });
-        
-        // Update table title
-        tableTitle.textContent = showAllTablePeriods ? 
-            'All Time Periods (Click to Collapse)' : 
-            'Recent Entries (Click to Expand)';
+        updateUI();
+        syncToGoogleSheets();
+        saveToLocalStorage();
     }
+}
 
-    // Function to update the chart
-    function updateChart() {
-        const currentPeriodIndex = getCurrentPeriodIndex();
-        
-        if (showAllChartPeriods) {
-            // Show all periods in reverse order
-            vehicleChart.data.labels = [...timePeriods].reverse();
-            vehicleChart.data.datasets[0].data = [...vehicleCounts].reverse();
-        } else {
-            // Show current period and up to 9 previous periods (max 10 rows)
-            const startIndex = Math.max(0, currentPeriodIndex - 9);
-            const periodsToShow = [];
-            const countsToShow = [];
-            
-            for (let i = currentPeriodIndex; i >= startIndex; i--) {
-                periodsToShow.push(timePeriods[i]);
-                countsToShow.push(vehicleCounts[i]);
-            }
-            
-            vehicleChart.data.labels = periodsToShow;
-            vehicleChart.data.datasets[0].data = countsToShow;
-        }
-        
-        // Update chart title
-        chartTitle.textContent = showAllChartPeriods ? 
-            'All Time Periods (Click to Collapse)' : 
-            'Recent Entries (Click to Expand)';
-        
-        vehicleChart.update();
+function exportToCSV() {
+    if (allEntries.length === 0) {
+        alert("No data to export");
+        return;
     }
+    
+    const data = [
+        ['HOURLY SUMMARY'],
+        ['Time Period', 'Vehicle Count'],
+        ...timePeriods.map((period, i) => [period, vehicleCounts[i]]).reverse(),
+        ['', ''],
+        ['Total Entries', totalEntries],
+        ['', ''],
+        ['', ''],
+        ['INDIVIDUAL ENTRIES'],
+        ['Timestamp', 'Time Slot', 'Formatted Time'],
+        ...allEntries.slice().reverse().map(e => [e.timestamp.toISOString(), e.timeSlot, e.formattedTime]),
+        ['', '', ''],
+        ['Total Entries', allEntries.length, '']
+    ];
+    
+    const csv = Papa.unparse(data);
+    const dateString = firstEntryDate.toISOString().slice(0, 10).replace(/-/g, '');
+    const filename = `Vehicle_Entry_${dateString}.csv`;
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
 
-    // Function to update total count
-    function updateTotalCount() {
-        totalCountElement.textContent = totalEntries;
-    }
-
-    // Helper function to format time as HH:MM:SS
-    function formatTime(date) {
-        return date.toTimeString().substring(0, 8);
-    }
-
-    // Function to add a new entry
-    function addEntry() {
-        const periodIndex = getCurrentPeriodIndex();
-        if (periodIndex === -1) {
-            alert("Outside of counting hours (07:30-02:29)");
-            return;
-        }
-        
-        const now = new Date();
-        vehicleCounts[periodIndex]++;
-        totalEntries++;
-        
-        // Set first entry date if not set
-        if (!firstEntryDate) {
-            firstEntryDate = now;
-        }
-        
-        // Store individual entry
-        allEntries.push({
-            timestamp: now,
-            timeSlot: timePeriods[periodIndex],
-            formattedTime: formatTime(now)
-        });
-        
-        // Update UI
-        updateChart();
-        updateTable();
-        updateTotalCount();
-        simulateGoogleSheetsSync();
-    }
-
-    // Function to undo the last entry
-    function undoEntry() {
-        if (totalEntries > 0 && allEntries.length > 0) {
-            // Remove the last entry
-            const lastEntry = allEntries.pop();
-            const periodIndex = timePeriods.indexOf(lastEntry.timeSlot);
-            
-            if (periodIndex !== -1) {
-                vehicleCounts[periodIndex]--;
-                totalEntries--;
-            }
-            
-            // Update UI
-            updateChart();
-            updateTable();
-            updateTotalCount();
-            simulateGoogleSheetsSync();
-        }
-    }
-
-    // Function to export data to CSV
-    function exportToCSV() {
-        if (allEntries.length === 0) {
-            alert("No data to export");
-            return;
-        }
-        
-        // Prepare data for CSV
-        const data = [];
-        
-        // Add Hourly Summary header
-        data.push(['HOURLY SUMMARY']);
-        data.push(['Time Period', 'Vehicle Count']);
-        
-        // Add hourly summary rows (in reverse chronological order)
-        for (let i = timePeriods.length - 1; i >= 0; i--) {
-            data.push([timePeriods[i], vehicleCounts[i]]);
-        }
-        
-        // Add hourly total row
-        data.push(['', '']);
-        data.push(['Total Entries', totalEntries]);
-        
-        // Add separator
-        data.push(['', '']);
-        data.push(['', '']);
-        data.push(['INDIVIDUAL ENTRIES']);
-        data.push(['Timestamp', 'Time Slot', 'Formatted Time']);
-        
-        // Add individual entries (sorted newest first)
-        allEntries.slice().reverse().forEach(entry => {
-            data.push([
-                entry.timestamp.toISOString(),
-                entry.timeSlot,
-                entry.formattedTime
-            ]);
-        });
-        
-        // Add individual entries total
-        data.push(['', '', '']);
-        data.push(['Total Entries', allEntries.length, '']);
-        
-        // Convert to CSV
-        const csv = Papa.unparse(data);
-        
-        // Create filename based on first entry date
-        const dateString = firstEntryDate.toISOString().slice(0, 10).replace(/-/g, '');
-        const filename = `Vehicle_Entry_${dateString}.csv`;
-        
-        // Create download link
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.setAttribute('href', url);
-        link.setAttribute('download', filename);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
-
-    // Simulate Google Sheets sync
-    function simulateGoogleSheetsSync() {
-        syncStatus.textContent = "Syncing to Google Sheets...";
-        
-        // Simulate network delay
-        setTimeout(() => {
-            syncIndicator.className = "sync-indicator sync-active";
-            syncStatus.textContent = "Synced to Google Sheets";
-            
-            // Reset after 3 seconds
-            setTimeout(() => {
-                syncStatus.textContent = "Syncing to Google Sheets";
-            }, 3000);
-        }, 1000);
-    }
-
-    // Event listeners
+// Event Listeners
+function setupEventListeners() {
     entryBtn.addEventListener('click', addEntry);
     undoBtn.addEventListener('click', undoEntry);
     exportBtn.addEventListener('click', exportToCSV);
-    tableTitle.addEventListener('click', function() {
+    tableTitle.addEventListener('click', () => {
         showAllTablePeriods = !showAllTablePeriods;
         updateTable();
     });
-    chartTitle.addEventListener('click', function() {
+    chartTitle.addEventListener('click', () => {
         showAllChartPeriods = !showAllChartPeriods;
         updateChart();
     });
+}
 
-   
-
-
-// Initialize the Google Sheets sync when the page loads
-        document.addEventListener('DOMContentLoaded', () => {
-            initializeGoogleSheetsSync();
-            
-            // [Rest of your existing initialization code]
-            updateTable();
-            updateChart();
-            updateTotalCount();
-
-            // Set up periodic sync (every minute)
-            setInterval(() => {
-                if (allEntries.length > 0) {
-                    syncToGoogleSheets();
-                }
-            }, 60000);
-        });
+// Initialize the application when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    setupEventListeners();
+    initializeApp();
+});
 
 </script>
 </body>
