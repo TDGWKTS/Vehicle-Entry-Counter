@@ -138,6 +138,16 @@
             transform: translateY(-2px);
         }
 
+        .btn-signin {
+            background-color: #4285F4;
+            color: white;
+        }
+
+        .btn-signin:hover {
+            background-color: #3578e5;
+            transform: translateY(-2px);
+        }
+
         .sync-status {
             display: flex;
             align-items: center;
@@ -344,6 +354,9 @@
                 <button class="btn btn-tertiary" id="exportBtn">
                     <i>⇩</i> EXPORT
                 </button>
+                <button class="btn btn-signin" id="signInBtn">
+                    <i>🔑</i> SIGN IN
+                </button>
             </div>
             <div class="sync-status">
                 <span class="sync-indicator sync-inactive" id="syncIndicator"></span>
@@ -387,11 +400,14 @@
     </div>
 
     <script>
-    // IMPORTANT: Ensure your GitHub Pages URL (e.g., https://<username>.github.io/vehicle-counter) is added to
+    // IMPORTANT: Ensure https://tdgwkts.github.io and https://tdgwkts.github.io/Vehicle-Entry-Counter are added to
     // "Authorized JavaScript origins" in Google Cloud Console -> APIs & Services -> Credentials -> OAuth 2.0 Client ID.
+    // Share the Google Sheet (ID: 1JwcmXZuC935CFWrsbSZPh4na39LQKlOqPJTO-YrkjA8) with edit access to your Google account.
+    // Allow popups for https://tdgwkts.github.io in your browser settings.
 
     // Google Sheets API configuration
-    const CLIENT_ID = '648651517357-duuq9cq6itq8ouanre9r5kersj49t0ij.apps.googleusercontent.com';
+    const CLIENT_ID = '648651517357-duuq9cq6itq8ouanre9r5kersj49t0ij.apps.googleuserconten
+t.com';
     const API_KEY = 'AIzaSyCnDPtA_eNCd1BTH0mmyoOj-rOnxrxJ0sg';
     const SPREADSHEET_ID = '1JwcmXZuC935CFWrsbSZPh4na39LQKlOqPJTO-YrkjA8';
     const DISCOVERY_DOCS = ['https://sheets.googleapis.com/$discovery/rest?version=v4'];
@@ -426,6 +442,7 @@
     const entryBtn = document.getElementById('entryBtn');
     const undoBtn = document.getElementById('undoBtn');
     const exportBtn = document.getElementById('exportBtn');
+    const signInBtn = document.getElementById('signInBtn');
     const syncIndicator = document.getElementById('syncIndicator');
     const syncStatus = document.getElementById('syncStatus');
 
@@ -558,28 +575,55 @@
                 callback: (tokenResponse) => {
                     if (tokenResponse && tokenResponse.access_token) {
                         accessToken = tokenResponse.access_token;
-                        // Set the access token for gapi client
                         gapi.client.setToken({ access_token: accessToken });
                         syncStatus.textContent = 'Connected to Google Sheets';
                         syncIndicator.className = 'sync-indicator sync-active';
-                        syncToGoogleSheets();
+                        checkSpreadsheetAccess();
                     } else {
                         console.error('Authentication failed: No access token received');
-                        syncStatus.textContent = 'Authentication failed';
+                        syncStatus.textContent = 'Authentication failed. Click Sign In and allow popups.';
                         syncIndicator.className = 'sync-indicator sync-inactive';
                     }
                 },
                 error_callback: (error) => {
                     console.error('Google Sign-In error:', error);
-                    syncStatus.textContent = `Sign-in failed: ${error.message || 'Unknown error'}`;
+                    let errorMessage = error.message || 'Unknown error';
+                    if (error.message.includes('popup')) {
+                        errorMessage = 'Popup blocked. Allow popups for https://tdgwkts.github.io and try Sign In again.';
+                    }
+                    syncStatus.textContent = `Sign-in failed: ${errorMessage}`;
                     syncIndicator.className = 'sync-indicator sync-inactive';
                 }
             });
-            // Request access token
-            tokenClient.requestAccessToken();
+            // Request access token automatically with no prompt initially
+            tokenClient.requestAccessToken({ prompt: '' });
         } catch (error) {
             console.error('Error initializing Google Sign-In:', error);
             syncStatus.textContent = 'Sign-in initialization failed';
+            syncIndicator.className = 'sync-indicator sync-inactive';
+        }
+    }
+
+    // Check spreadsheet access
+    function checkSpreadsheetAccess() {
+        if (!accessToken) {
+            syncStatus.textContent = 'Not signed in';
+            syncIndicator.className = 'sync-indicator sync-inactive';
+            return;
+        }
+        try {
+            gapi.client.sheets.spreadsheets.get({
+                spreadsheetId: SPREADSHEET_ID
+            }).then(response => {
+                syncToGoogleSheets();
+            }).catch(error => {
+                console.error('Error accessing spreadsheet:', error);
+                syncStatus.textContent = `Cannot access spreadsheet: ${error.result?.error?.message || error.message || 'Unknown error'}. Share the sheet with your Google account.`;
+                syncIndicator.className = 'sync-indicator sync-inactive';
+            });
+        } catch (error) {
+            console.error('Error checking spreadsheet access:', error);
+            syncStatus.textContent = `Access check failed: ${error.message || 'Unknown error'}`;
             syncIndicator.className = 'sync-indicator sync-inactive';
         }
     }
@@ -632,13 +676,18 @@
                 }, 3000);
             }).catch(error => {
                 console.error('Error syncing to Google Sheets:', error);
-                syncStatus.textContent = `Sync failed: ${error.result?.error?.message || error.message || 'Unknown error'}`;
-                syncIndicator.className = 'sync-indicator sync-inactive';
-                // Re-authenticate if token is invalid
-                if (error.result?.error?.status === 'UNAUTHENTICATED') {
+                let errorMessage = error.result?.error?.message || error.message || 'Unknown error';
+                if (error.result?.error?.status === 'PERMISSION_DENIED') {
+                    errorMessage = 'Permission denied. Share the spreadsheet with your Google account.';
+                } else if (error.result?.error?.status === 'UNAUTHENTICATED') {
                     accessToken = null;
+                    errorMessage = 'Authentication expired. Click Sign In and allow popups.';
                     initGoogleSignIn();
+                } else if (error.result?.error?.status === 'INVALID_ARGUMENT') {
+                    errorMessage = 'Invalid request. Check spreadsheet ID and range.';
                 }
+                syncStatus.textContent = `Sync failed: ${errorMessage}`;
+                syncIndicator.className = 'sync-indicator sync-inactive';
             });
         } catch (error) {
             console.error('Error preparing sync request:', error);
@@ -866,6 +915,14 @@
     entryBtn.addEventListener('click', addEntry);
     undoBtn.addEventListener('click', undoEntry);
     exportBtn.addEventListener('click', exportToCSV);
+    signInBtn.addEventListener('click', () => {
+        if (tokenClient) {
+            tokenClient.requestAccessToken({ prompt: 'consent' });
+        } else {
+            syncStatus.textContent = 'Sign-in not initialized. Refresh the page.';
+            syncIndicator.className = 'sync-indicator sync-inactive';
+        }
+    });
     tableTitle.addEventListener('click', function() {
         showAllTablePeriods = !showAllTablePeriods;
         updateTable();
