@@ -180,7 +180,7 @@
 
         .main-content {
             display: flex;
-            height: calc(100% - 180px);
+            min-height: calc(100vh - 180px);
             padding: 0 10px;
             gap: 10px;
         }
@@ -211,6 +211,8 @@
         .chart-wrapper {
             flex: 1;
             position: relative;
+            overflow-y: auto;
+            min-height: 300px;
         }
 
         .table-container {
@@ -218,7 +220,6 @@
             background-color: #ffffff;
             padding: 20px;
             border-radius: 8px;
-            overflow: hidden;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
             display: flex;
             flex-direction: column;
@@ -239,7 +240,8 @@
 
         .table-wrapper {
             flex: 1;
-            overflow: auto;
+            overflow-y: auto;
+            min-height: 300px;
         }
 
         table {
@@ -259,6 +261,7 @@
             color: #495057;
             position: sticky;
             top: 0;
+            z-index: 1;
         }
 
         tr:hover {
@@ -273,10 +276,12 @@
         @media (max-width: 992px) {
             .main-content {
                 flex-direction: column;
-                height: auto;
+                min-height: auto;
+                overflow: auto;
             }
             .chart-container, .table-container {
                 width: 100%;
+                flex: 1;
             }
             .header {
                 flex-direction: column;
@@ -383,7 +388,7 @@
         <!-- Table container (25%) -->
         <div class="table-container">
             <div class="table-title" id="tableTitle">Recent Entries (Click to Expand)</div>
-            <div class="table-wrapper" id="tableWrapper">
+            <div class="table-wrapper">
                 <table id="entryTable">
                     <thead>
                         <tr>
@@ -479,7 +484,10 @@
                     backgroundColor: 'rgba(54, 162, 235, 0.7)',
                     borderColor: 'rgba(54, 162, 235, 1)',
                     borderWidth: 1,
-                    borderRadius: 5
+                    borderRadius: 5,
+                    barPercentage: 0.9,
+                    categoryPercentage: 0.8,
+                    barThickness: 20
                 }]
             },
             options: {
@@ -510,7 +518,8 @@
                     y: {
                         grid: { display: false },
                         ticks: { font: { size: 12 } },
-                        title: { display: true, text: 'Time Period', font: { size: 14, weight: 'bold' } }
+                        title: { display: true, text: 'Time Period', font: { size: 14, weight: 'bold' } },
+                        suggestedMax: timePeriods.length - 1
                     }
                 }
             }
@@ -595,7 +604,7 @@
             
             chartTitle.textContent = showAllChartPeriods ? 
                 'All Time Periods (Click to Collapse)' : 
-                'Recent Entries (Click to Expand)';
+                'Hourly Vehicle Entries (Click to Expand)';
             
             vehicleChart.update();
         }
