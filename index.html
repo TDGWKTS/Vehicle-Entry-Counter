@@ -907,9 +907,12 @@
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
 
-                // Clear local storage after successful CSV download
+                // Export to Google Sheet and clear local storage
+                const exportSuccess = await exportToGoogleSheet('manual');
                 clearLocalStorage();
-                syncStatus.textContent = 'Data exported and local storage cleared';
+                syncStatus.textContent = exportSuccess ? 
+                    'Data exported to CSV and Google Sheet, local storage cleared' : 
+                    'Data exported to CSV, local storage cleared, Google Sheet sync failed';
                 setTimeout(() => {
                     syncStatus.textContent = accessToken ? 'Connected to Google Sheets' : 'Not signed in';
                 }, 3000);
@@ -919,9 +922,6 @@
                 syncIndicator.className = 'sync-indicator sync-inactive';
                 return;
             }
-
-            // Export to Google Sheet
-            await exportToGoogleSheet('manual');
         }
 
         // Wait for Google Identity Services and gapi to load
