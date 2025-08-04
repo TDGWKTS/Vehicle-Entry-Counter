@@ -240,6 +240,17 @@
             scrollbar-color: #888 #f1f1f1;
         }
 
+        .chart-canvas-container {
+            width: 100%;
+            min-height: 600px;
+            position: relative;
+        }
+
+        .chart-canvas-container.expanded {
+            height: auto;
+            min-height: 1200px;
+        }
+
         .table-container {
             width: 25%;
             background-color: #ffffff;
@@ -431,7 +442,9 @@
         <div class="chart-container">
             <div class="chart-title" id="chartTitle">Hourly Vehicle Entries (Click to Expand)</div>
             <div class="chart-wrapper">
-                <canvas id="vehicleChart"></canvas>
+                <div class="chart-canvas-container" id="chartCanvasContainer">
+                    <canvas id="vehicleChart"></canvas>
+                </div>
             </div>
         </div>
         
@@ -506,6 +519,7 @@
         const signInBtn = document.getElementById('signInBtn');
         const syncIndicator = document.getElementById('syncIndicator');
         const syncStatus = document.getElementById('syncStatus');
+        const chartCanvasContainer = document.getElementById('chartCanvasContainer');
 
         // Verify DOM elements exist
         if (!entryBtn || !undoBtn || !exportBtn || !signInBtn) {
@@ -560,7 +574,7 @@
                 },
                 scales: {
                     x: {
-                        beginAtZero: true;
+                        beginAtZero: true,
                         ticks: { precision: 0, font: { size: 12 } },
                         grid: { color: 'rgba(0, 0, 0, 0.05)' },
                         title: { display: true, text: 'Number of Vehicles', font: { size: 14, weight: 'bold' } }
@@ -568,8 +582,7 @@
                     y: {
                         grid: { display: false },
                         ticks: { font: { size: 12 } },
-                        title: { display: true, text: 'Time Period', font: { size: 14, weight: 'bold' } },
-                        suggestedMax: timePeriods.length - 1
+                        title: { display: true, text: 'Time Period', font: { size: 14, weight: 'bold' } }
                     }
                 }
             }
@@ -636,20 +649,22 @@
             const currentPeriodIndex = getCurrentPeriodIndex();
             
             if (showAllChartPeriods) {
-                vehicleChart.data.labels = [...timePeriods].reverse();
-                vehicleChart.data.datasets[0].data = [...vehicleCounts].reverse();
+                vehicleChart.data.labels = [...timePeriods];
+                vehicleChart.data.datasets[0].data = [...vehicleCounts];
+                chartCanvasContainer.classList.add('expanded');
             } else {
                 const startIndex = Math.max(0, currentPeriodIndex - 9);
                 const periodsToShow = [];
                 const countsToShow = [];
                 
                 for (let i = currentPeriodIndex; i >= startIndex; i--) {
-                    periodsToShow.push(timePeriods[i]);
-                    countsToShow.push(vehicleCounts[i]);
+                    periodsToShow.unshift(timePeriods[i]);
+                    countsToShow.unshift(vehicleCounts[i]);
                 }
                 
                 vehicleChart.data.labels = periodsToShow;
                 vehicleChart.data.datasets[0].data = countsToShow;
+                chartCanvasContainer.classList.remove('expanded');
             }
             
             chartTitle.textContent = showAllChartPeriods ? 
