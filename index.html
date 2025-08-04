@@ -19,8 +19,8 @@
         body {
             background-color: #f0f2f5;
             color: #333;
-            height: 100vh;
-            overflow: hidden;
+            min-height: 100vh;
+            overflow-x: hidden;
         }
 
         .page-title {
@@ -35,38 +35,36 @@
 
         .header {
             display: flex;
+            flex-wrap: wrap;
             justify-content: space-between;
-            align-items: flex-start;
-            padding: 20px;
+            align-items: center;
+            padding: 15px;
             background-color: white;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             margin-bottom: 10px;
-            gap: 20px;
+            gap: 15px;
         }
 
         .counter-display {
             background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
             color: white;
             border-radius: 8px;
-            padding: 15px 25px;
+            padding: 15px;
             text-align: center;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            width: 250px;
-            height: 100px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
+            min-width: 200px;
+            flex: 1 1 auto;
             order: 1;
         }
 
         .counter-display h2 {
-            font-size: 1.1rem;
+            font-size: 1rem;
             margin-bottom: 5px;
             font-weight: 500;
         }
 
         .counter-value {
-            font-size: 2.2rem;
+            font-size: 2rem;
             font-weight: 700;
         }
 
@@ -75,22 +73,23 @@
             flex-direction: column;
             align-items: center;
             gap: 10px;
-            order: 2;
-            flex: 1;
+            order: 3;
+            width: 100%;
         }
 
         .control-buttons {
             display: flex;
-            gap: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
             justify-content: center;
             width: 100%;
         }
 
         .btn {
-            padding: 0 20px;
+            padding: 10px 15px;
             border: none;
             border-radius: 8px;
-            font-size: 1rem;
+            font-size: 0.9rem;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
@@ -98,19 +97,21 @@
             align-items: center;
             justify-content: center;
             gap: 8px;
-            height: 50px;
+            min-height: 50px;
+            flex: 1 1 120px;
         }
 
         .btn i {
-            font-size: 1.1rem;
+            font-size: 1rem;
         }
 
         .btn-primary {
             background-color: #4CAF50;
             color: white;
-            width: 250px;
-            height: 100px;
-            order: 3;
+            order: 2;
+            flex: 1 1 100%;
+            min-height: 80px;
+            font-size: 1.2rem;
         }
 
         .btn-primary:hover {
@@ -180,28 +181,32 @@
 
         .main-content {
             display: flex;
-            height: calc(100% - 180px);
-            padding: 0 10px;
+            flex-direction: column;
+            height: calc(100vh - 200px);
+            padding: 0 10px 10px;
             gap: 10px;
         }
 
         .chart-container {
-            width: 75%;
             background-color: #ffffff;
-            padding: 20px;
+            padding: 15px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
             display: flex;
             flex-direction: column;
+            flex: 1;
+            min-height: 300px;
+            overflow: hidden;
         }
 
         .chart-title {
-            font-size: 1.3rem;
+            font-size: 1.2rem;
             font-weight: 600;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
             color: #333;
             cursor: pointer;
             user-select: none;
+            padding: 5px;
         }
 
         .chart-title:hover {
@@ -211,26 +216,31 @@
         .chart-wrapper {
             flex: 1;
             position: relative;
+            min-height: 200px;
+            width: 100%;
+            overflow: auto;
         }
 
         .table-container {
-            width: 25%;
             background-color: #ffffff;
-            padding: 20px;
+            padding: 15px;
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
             display: flex;
             flex-direction: column;
+            flex: 1;
+            min-height: 200px;
         }
 
         .table-title {
-            font-size: 1.3rem;
+            font-size: 1.2rem;
             font-weight: 600;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
             color: #333;
             cursor: pointer;
             user-select: none;
+            padding: 5px;
         }
 
         .table-title:hover {
@@ -240,17 +250,20 @@
         .table-wrapper {
             flex: 1;
             overflow: auto;
+            width: 100%;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
+            min-width: 400px;
         }
 
         th, td {
-            padding: 12px 15px;
+            padding: 10px 12px;
             text-align: left;
             border-bottom: 1px solid #e0e0e0;
+            white-space: nowrap;
         }
 
         th {
@@ -270,65 +283,141 @@
             font-weight: 600;
         }
 
-        @media (max-width: 992px) {
-            .main-content {
-                flex-direction: column;
-                height: auto;
-            }
-            .chart-container, .table-container {
-                width: 100%;
-            }
+        /* Expanded states */
+        .chart-expanded {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1000;
+            background: white;
+            padding: 20px;
+            overflow: auto;
+        }
+
+        .table-expanded {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1000;
+            background: white;
+            padding: 20px;
+            overflow: auto;
+        }
+
+        .close-expanded {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1001;
+        }
+
+        /* Media Queries */
+        @media (min-width: 768px) {
             .header {
-                flex-direction: column;
-                align-items: center;
-                gap: 15px;
+                flex-wrap: nowrap;
+                padding: 20px;
             }
-            .counter-display, .btn-primary {
-                width: 100%;
-                height: auto;
-                order: initial;
+            
+            .counter-display {
+                flex: 0 1 250px;
+                order: 1;
             }
+            
             .button-group {
-                width: 100%;
-                order: initial;
+                order: 2;
+                width: auto;
+                flex: 1;
             }
-            .control-buttons {
-                flex-wrap: wrap;
+            
+            .btn-primary {
+                order: 3;
+                flex: 0 1 250px;
+                min-height: 100px;
             }
+            
+            .main-content {
+                flex-direction: row;
+                height: calc(100vh - 180px);
+            }
+            
+            .chart-container, .table-container {
+                flex: 1;
+            }
+            
             .btn {
-                width: 100%;
+                flex: 0 1 auto;
+                padding: 10px 20px;
             }
         }
 
-        @media (max-width: 768px) {
+        @media (min-width: 992px) {
+            .counter-display {
+                padding: 15px 25px;
+            }
+            
+            .counter-value {
+                font-size: 2.2rem;
+            }
+            
             .btn {
-                padding: 14px;
                 font-size: 1rem;
             }
-            .counter-value {
-                font-size: 2rem;
+            
+            .btn-primary {
+                font-size: 1.3rem;
             }
-            .page-title {
-                font-size: 1.5rem;
-                padding: 10px 0;
+            
+            .chart-title, .table-title {
+                font-size: 1.3rem;
             }
         }
 
         @media (max-width: 480px) {
-            .header {
-                padding: 15px;
+            .page-title {
+                font-size: 1.4rem;
+                padding: 10px 0;
             }
+            
+            .counter-display h2 {
+                font-size: 0.9rem;
+            }
+            
             .counter-value {
                 font-size: 1.8rem;
             }
+            
             .btn {
-                padding: 12px;
+                padding: 8px 12px;
+                font-size: 0.85rem;
             }
+            
+            .btn-primary {
+                min-height: 70px;
+                font-size: 1.1rem;
+            }
+            
             .chart-title, .table-title {
                 font-size: 1.1rem;
             }
-            .page-title {
-                font-size: 1.3rem;
+            
+            th, td {
+                padding: 8px 10px;
+                font-size: 0.9rem;
             }
         }
     </style>
@@ -372,16 +461,16 @@
     
     <!-- Main content area -->
     <div class="main-content">
-        <!-- Chart container (75%) -->
-        <div class="chart-container">
+        <!-- Chart container -->
+        <div class="chart-container" id="chartContainer">
             <div class="chart-title" id="chartTitle">Hourly Vehicle Entries (Click to Expand)</div>
             <div class="chart-wrapper">
                 <canvas id="vehicleChart"></canvas>
             </div>
         </div>
         
-        <!-- Table container (25%) -->
-        <div class="table-container">
+        <!-- Table container -->
+        <div class="table-container" id="tableContainer">
             <div class="table-title" id="tableTitle">Recent Entries (Click to Expand)</div>
             <div class="table-wrapper" id="tableWrapper">
                 <table id="entryTable">
@@ -433,6 +522,9 @@
     let allEntries = [];
     let accessToken = null;
     let tokenClient = null;
+    let isChartExpanded = false;
+    let isTableExpanded = false;
+    let vehicleChart = null;
 
     // Wait for DOM to load before accessing elements
     document.addEventListener('DOMContentLoaded', () => {
@@ -447,6 +539,10 @@
         const signInBtn = document.getElementById('signInBtn');
         const syncIndicator = document.getElementById('syncIndicator');
         const syncStatus = document.getElementById('syncStatus');
+        const chartContainer = document.getElementById('chartContainer');
+        const tableContainer = document.getElementById('tableContainer');
+        const tableWrapper = document.getElementById('tableWrapper');
+        const chartWrapper = document.querySelector('.chart-wrapper');
 
         // Verify DOM elements exist
         if (!entryBtn || !undoBtn || !exportBtn || !signInBtn) {
@@ -465,52 +561,85 @@
             return;
         }
 
-        const vehicleChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: timePeriods,
-                datasets: [{
-                    label: 'Vehicles per Time Period',
-                    data: vehicleCounts,
-                    backgroundColor: 'rgba(54, 162, 235, 0.7)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1,
-                    borderRadius: 5
-                }]
-            },
-            options: {
-                indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                        padding: 10,
-                        titleFont: { size: 14 },
-                        bodyFont: { size: 13 },
-                        callbacks: {
-                            label: function(context) {
-                                return `Vehicles: ${context.raw}`;
+        // Function to create or update chart
+        function initializeChart() {
+            if (vehicleChart) {
+                vehicleChart.destroy();
+            }
+            
+            vehicleChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: showAllChartPeriods ? [...timePeriods].reverse() : getRecentPeriods().reverse(),
+                    datasets: [{
+                        label: 'Vehicles per Time Period',
+                        data: showAllChartPeriods ? [...vehicleCounts].reverse() : getRecentCounts().reverse(),
+                        backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1,
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            padding: 10,
+                            titleFont: { size: 14 },
+                            bodyFont: { size: 13 },
+                            callbacks: {
+                                label: function(context) {
+                                    return `Vehicles: ${context.raw}`;
+                                }
                             }
                         }
-                    }
-                },
-                scales: {
-                    x: {
-                        beginAtZero: true,
-                        ticks: { precision: 0, font: { size: 12 } },
-                        grid: { color: 'rgba(0, 0, 0, 0.05)' },
-                        title: { display: true, text: 'Number of Vehicles', font: { size: 14, weight: 'bold' } }
                     },
-                    y: {
-                        grid: { display: false },
-                        ticks: { font: { size: 12 } },
-                        title: { display: true, text: 'Time Period', font: { size: 14, weight: 'bold' } }
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: { precision: 0, font: { size: 12 } },
+                            grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                            title: { display: true, text: 'Number of Vehicles', font: { size: 14, weight: 'bold' } }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: { font: { size: 12 } },
+                            title: { display: true, text: 'Time Period', font: { size: 14, weight: 'bold' } }
+                        }
                     }
                 }
+            });
+        }
+
+        // Get recent periods for chart
+        function getRecentPeriods() {
+            const currentPeriodIndex = getCurrentPeriodIndex();
+            if (currentPeriodIndex === -1) return timePeriods.slice(-10);
+            
+            const startIndex = Math.max(0, currentPeriodIndex - 9);
+            const periods = [];
+            for (let i = currentPeriodIndex; i >= startIndex; i--) {
+                periods.push(timePeriods[i]);
             }
-        });
+            return periods;
+        }
+
+        // Get recent counts for chart
+        function getRecentCounts() {
+            const currentPeriodIndex = getCurrentPeriodIndex();
+            if (currentPeriodIndex === -1) return vehicleCounts.slice(-10);
+            
+            const startIndex = Math.max(0, currentPeriodIndex - 9);
+            const counts = [];
+            for (let i = currentPeriodIndex; i >= startIndex; i--) {
+                counts.push(vehicleCounts[i]);
+            }
+            return counts;
+        }
 
         // Load data from local storage
         function loadFromLocalStorage() {
@@ -526,6 +655,8 @@
                 })) : [];
                 showAllTablePeriods = parsedData.showAllTablePeriods || false;
                 showAllChartPeriods = parsedData.showAllChartPeriods || false;
+                isChartExpanded = parsedData.isChartExpanded || false;
+                isTableExpanded = parsedData.isTableExpanded || false;
             }
         }
 
@@ -540,7 +671,9 @@
                     timestamp: entry.timestamp.toISOString()
                 })),
                 showAllTablePeriods,
-                showAllChartPeriods
+                showAllChartPeriods,
+                isChartExpanded,
+                isTableExpanded
             };
             localStorage.setItem('vehicleEntryCounter', JSON.stringify(data));
         }
@@ -554,6 +687,8 @@
             allEntries = [];
             showAllTablePeriods = false;
             showAllChartPeriods = false;
+            isChartExpanded = false;
+            isTableExpanded = false;
             updateChart();
             updateTable();
             updateTotalCount();
@@ -584,7 +719,7 @@
             tableBody.innerHTML = '';
             
             let periodsToShow = [];
-            if (showAllTablePeriods) {
+            if (showAllTablePeriods || isTableExpanded) {
                 for (let i = timePeriods.length - 1; i >= 0; i--) {
                     periodsToShow.push({
                         period: timePeriods[i],
@@ -610,37 +745,18 @@
                 tableBody.appendChild(row);
             });
             
-            tableTitle.textContent = showAllTablePeriods ? 
+            tableTitle.textContent = (showAllTablePeriods || isTableExpanded) ? 
                 'All Time Periods (Click to Collapse)' : 
                 'Recent Entries (Click to Expand)';
         }
 
         // Function to update the chart
         function updateChart() {
-            const currentPeriodIndex = getCurrentPeriodIndex();
+            initializeChart();
             
-            if (showAllChartPeriods) {
-                vehicleChart.data.labels = [...timePeriods].reverse();
-                vehicleChart.data.datasets[0].data = [...vehicleCounts].reverse();
-            } else {
-                const startIndex = Math.max(0, currentPeriodIndex - 9);
-                const periodsToShow = [];
-                const countsToShow = [];
-                
-                for (let i = currentPeriodIndex; i >= startIndex; i--) {
-                    periodsToShow.push(timePeriods[i]);
-                    countsToShow.push(vehicleCounts[i]);
-                }
-                
-                vehicleChart.data.labels = periodsToShow;
-                vehicleChart.data.datasets[0].data = countsToShow;
-            }
-            
-            chartTitle.textContent = showAllChartPeriods ? 
+            chartTitle.textContent = (showAllChartPeriods || isChartExpanded) ? 
                 'All Time Periods (Click to Collapse)' : 
                 'Recent Entries (Click to Expand)';
-            
-            vehicleChart.update();
         }
 
         // Function to update total count
@@ -663,7 +779,6 @@
 
         // Function to add a new entry
         function addEntry() {
-            console.log('ENTRY button clicked');
             const periodIndex = getCurrentPeriodIndex();
             if (periodIndex === -1) {
                 syncStatus.textContent = 'Outside of counting hours (07:30-02:29)';
@@ -691,7 +806,6 @@
 
         // Function to undo the last entry
         function undoEntry() {
-            console.log('UNDO button clicked');
             if (totalEntries > 0 && allEntries.length > 0) {
                 const lastEntry = allEntries.pop();
                 const periodIndex = timePeriods.indexOf(lastEntry.timeSlot);
@@ -707,6 +821,70 @@
                 saveToLocalStorage();
                 syncToGoogleSheets();
             }
+        }
+
+        // Function to toggle chart expanded state
+        function toggleChartExpanded() {
+            isChartExpanded = !isChartExpanded;
+            
+            if (isChartExpanded) {
+                chartContainer.classList.add('chart-expanded');
+                document.body.style.overflow = 'hidden';
+                
+                // Create close button
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'close-expanded';
+                closeBtn.innerHTML = '×';
+                closeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    toggleChartExpanded();
+                };
+                chartContainer.appendChild(closeBtn);
+            } else {
+                chartContainer.classList.remove('chart-expanded');
+                document.body.style.overflow = '';
+                
+                // Remove close button
+                const closeBtn = chartContainer.querySelector('.close-expanded');
+                if (closeBtn) {
+                    chartContainer.removeChild(closeBtn);
+                }
+            }
+            
+            updateChart();
+            saveToLocalStorage();
+        }
+
+        // Function to toggle table expanded state
+        function toggleTableExpanded() {
+            isTableExpanded = !isTableExpanded;
+            
+            if (isTableExpanded) {
+                tableContainer.classList.add('table-expanded');
+                document.body.style.overflow = 'hidden';
+                
+                // Create close button
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'close-expanded';
+                closeBtn.innerHTML = '×';
+                closeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    toggleTableExpanded();
+                };
+                tableContainer.appendChild(closeBtn);
+            } else {
+                tableContainer.classList.remove('table-expanded');
+                document.body.style.overflow = '';
+                
+                // Remove close button
+                const closeBtn = tableContainer.querySelector('.close-expanded');
+                if (closeBtn) {
+                    tableContainer.removeChild(closeBtn);
+                }
+            }
+            
+            updateTable();
+            saveToLocalStorage();
         }
 
         // Function to ensure Sheet1 exists for regular syncs
@@ -733,7 +911,6 @@
                             }
                         }]
                     });
-                    console.log('Created Sheet1');
                 }
                 return true;
             } catch (error) {
@@ -768,7 +945,6 @@
                             }
                         }]
                     });
-                    console.log(`Created sheet ${sheetName}`);
                 }
                 return true;
             } catch (error) {
@@ -864,7 +1040,6 @@
 
         // Function to export data to CSV and Google Sheet
         async function exportToCSV() {
-            console.log('EXPORT button clicked');
             if (allEntries.length === 0) {
                 syncStatus.textContent = 'No data to export';
                 return;
@@ -1083,20 +1258,10 @@
         }
 
         // Event listeners
-        entryBtn.addEventListener('click', () => {
-            console.log('Attaching ENTRY button listener');
-            addEntry();
-        });
-        undoBtn.addEventListener('click', () => {
-            console.log('Attaching UNDO button listener');
-            undoEntry();
-        });
-        exportBtn.addEventListener('click', () => {
-            console.log('Attaching EXPORT button listener');
-            exportToCSV();
-        });
+        entryBtn.addEventListener('click', addEntry);
+        undoBtn.addEventListener('click', undoEntry);
+        exportBtn.addEventListener('click', exportToCSV);
         signInBtn.addEventListener('click', () => {
-            console.log('Attaching SIGN IN button listener');
             if (tokenClient) {
                 tokenClient.requestAccessToken({ prompt: 'consent' });
             } else {
@@ -1104,23 +1269,17 @@
                 syncIndicator.className = 'sync-indicator sync-inactive';
             }
         });
-        tableTitle.addEventListener('click', () => {
-            console.log('Attaching table title listener');
-            showAllTablePeriods = !showAllTablePeriods;
-            updateTable();
-            saveToLocalStorage();
-        });
-        chartTitle.addEventListener('click', () => {
-            console.log('Attaching chart title listener');
-            showAllChartPeriods = !showAllChartPeriods;
-            updateChart();
-            saveToLocalStorage();
-        });
+        
+        // Toggle table expansion
+        tableTitle.addEventListener('click', toggleTableExpanded);
+        
+        // Toggle chart expansion
+        chartTitle.addEventListener('click', toggleChartExpanded);
 
         // Initialize
         loadFromLocalStorage();
+        initializeChart();
         updateTable();
-        updateChart();
         updateTotalCount();
         waitForGoogleApis();
 
@@ -1130,6 +1289,13 @@
                 syncToGoogleSheets();
             }
         }, 60000);
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (vehicleChart) {
+                vehicleChart.resize();
+            }
+        });
     });
     </script>
 </body>
