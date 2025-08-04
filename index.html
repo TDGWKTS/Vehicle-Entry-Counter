@@ -212,8 +212,32 @@
             flex: 1;
             position: relative;
             overflow-y: auto;
-            min-height: 450px;
+            min-height: 600px;
             max-height: calc(100% - 40px);
+        }
+
+        .chart-wrapper::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .chart-wrapper::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .chart-wrapper::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        .chart-wrapper::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        .chart-wrapper {
+            -ms-overflow-style: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #888 #f1f1f1;
         }
 
         .table-container {
@@ -242,8 +266,32 @@
         .table-wrapper {
             flex: 1;
             overflow-y: auto;
-            min-height: 450px;
+            min-height: 600px;
             max-height: calc(100% - 40px);
+        }
+
+        .table-wrapper::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .table-wrapper::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .table-wrapper::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        .table-wrapper::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        .table-wrapper {
+            -ms-overflow-style: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #888 #f1f1f1;
         }
 
         table {
@@ -512,7 +560,7 @@
                 },
                 scales: {
                     x: {
-                        beginAtZero: true,
+                        beginAtZero: true;
                         ticks: { precision: 0, font: { size: 12 } },
                         grid: { color: 'rgba(0, 0, 0, 0.05)' },
                         title: { display: true, text: 'Number of Vehicles', font: { size: 14, weight: 'bold' } }
