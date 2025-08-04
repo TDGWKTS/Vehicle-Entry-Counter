@@ -194,7 +194,7 @@
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
             display: flex;
             flex-direction: column;
-            flex: 1;
+            flex: 3; /* 75% width */
             min-height: 300px;
             overflow: hidden;
         }
@@ -229,7 +229,7 @@
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
             display: flex;
             flex-direction: column;
-            flex: 1;
+            flex: 1; /* 25% width */
             min-height: 200px;
         }
 
@@ -355,8 +355,12 @@
                 height: calc(100vh - 180px);
             }
             
-            .chart-container, .table-container {
-                flex: 1;
+            .chart-container {
+                flex: 3; /* 75% width */
+            }
+            
+            .table-container {
+                flex: 1; /* 25% width */
             }
             
             .btn {
@@ -461,7 +465,7 @@
     
     <!-- Main content area -->
     <div class="main-content">
-        <!-- Chart container -->
+        <!-- Chart container (75%) -->
         <div class="chart-container" id="chartContainer">
             <div class="chart-title" id="chartTitle">Hourly Vehicle Entries (Click to Expand)</div>
             <div class="chart-wrapper">
@@ -469,7 +473,7 @@
             </div>
         </div>
         
-        <!-- Table container -->
+        <!-- Table container (25%) -->
         <div class="table-container" id="tableContainer">
             <div class="table-title" id="tableTitle">Recent Entries (Click to Expand)</div>
             <div class="table-wrapper" id="tableWrapper">
@@ -552,28 +556,39 @@
             return;
         }
 
-        // Initialize Chart.js with horizontal bars
-        const ctx = document.getElementById('vehicleChart')?.getContext('2d');
-        if (!ctx) {
-            console.error('Canvas context not found');
-            syncStatus.textContent = 'Error: Chart initialization failed';
-            syncIndicator.className = 'sync-indicator sync-inactive';
-            return;
-        }
-
-        // Function to create or update chart
+        // Function to create or update chart with descending order (current period at top)
         function initializeChart() {
             if (vehicleChart) {
                 vehicleChart.destroy();
             }
             
+            const currentPeriodIndex = getCurrentPeriodIndex();
+            let labels, data;
+            
+            if (showAllChartPeriods || isChartExpanded) {
+                // For expanded view, show all periods in descending order
+                labels = [...timePeriods].reverse();
+                data = [...vehicleCounts].reverse();
+            } else {
+                // For normal view, show recent periods with current at top
+                const startIndex = Math.max(0, currentPeriodIndex - 9);
+                labels = [];
+                data = [];
+                
+                for (let i = currentPeriodIndex; i >= startIndex; i--) {
+                    labels.push(timePeriods[i]);
+                    data.push(vehicleCounts[i]);
+                }
+            }
+            
+            const ctx = document.getElementById('vehicleChart').getContext('2d');
             vehicleChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: showAllChartPeriods ? [...timePeriods].reverse() : getRecentPeriods().reverse(),
+                    labels: labels,
                     datasets: [{
                         label: 'Vehicles per Time Period',
-                        data: showAllChartPeriods ? [...vehicleCounts].reverse() : getRecentCounts().reverse(),
+                        data: data,
                         backgroundColor: 'rgba(54, 162, 235, 0.7)',
                         borderColor: 'rgba(54, 162, 235, 1)',
                         borderWidth: 1,
@@ -613,32 +628,6 @@
                     }
                 }
             });
-        }
-
-        // Get recent periods for chart
-        function getRecentPeriods() {
-            const currentPeriodIndex = getCurrentPeriodIndex();
-            if (currentPeriodIndex === -1) return timePeriods.slice(-10);
-            
-            const startIndex = Math.max(0, currentPeriodIndex - 9);
-            const periods = [];
-            for (let i = currentPeriodIndex; i >= startIndex; i--) {
-                periods.push(timePeriods[i]);
-            }
-            return periods;
-        }
-
-        // Get recent counts for chart
-        function getRecentCounts() {
-            const currentPeriodIndex = getCurrentPeriodIndex();
-            if (currentPeriodIndex === -1) return vehicleCounts.slice(-10);
-            
-            const startIndex = Math.max(0, currentPeriodIndex - 9);
-            const counts = [];
-            for (let i = currentPeriodIndex; i >= startIndex; i--) {
-                counts.push(vehicleCounts[i]);
-            }
-            return counts;
         }
 
         // Load data from local storage
