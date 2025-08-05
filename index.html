@@ -510,7 +510,7 @@
         </div>
     </div>
 
-    <script>
+   <script>
     // IMPORTANT: Ensure https://tdgwkts.github.io and https://tdgwkts.github.io/Vehicle-Entry-Counter are added to
     // "Authorized JavaScript origins" in Google Cloud Console -> APIs & Services -> Credentials -> OAuth 2.0 Client ID.
     // Share the Google Sheet (ID: 1JwcmXZuC935CFWrsbSZPh4na39LQKlOqPJTO-YrkjA8) with edit access to your Google account.
@@ -643,59 +643,20 @@
                             ticks: { font: { size: 12 } },
                             title: { display: true, text: 'Time Period', font: { size: 14, weight: 'bold' } }
                         }
-                    }
+                    },
+                    elements: {
+                        bar: {
+                            borderWidth: 1,
+                            borderRadius: 5,
+                            borderSkipped: false,
+                        }
+                    },
+                    barThickness: 20,
+                    categoryPercentage: 0.8,
+                    barPercentage: 0.9
                 }
             });
         }
-
-
-// In the initGoogleSignIn function, add this after setting the access token:
-    if (tokenResponse && tokenResponse.access_token) {
-        accessToken = tokenResponse.access_token;
-        gapi.client.setToken({ access_token: accessToken });
-        syncStatus.textContent = 'Connected to Google Sheets';
-        syncIndicator.className = 'sync-indicator sync-active';
-        document.getElementById('signInBtn').classList.add('hidden'); // Add this line
-        checkSpreadsheetAccess();
-    }
-
-    // In the initializeChart function, modify the chart options:
-    options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { display: false },
-            tooltip: {
-                backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                padding: 10,
-                titleFont: { size: 14 },
-                bodyFont: { size: 13 },
-                callbacks: {
-                    label: function(context) {
-                        return `Vehicles: ${context.raw}`;
-                    }
-                }
-            }
-        },
-        scales: {
-            x: {
-                beginAtZero: true,
-                ticks: { precision: 0, font: { size: 12 } },
-                grid: { color: 'rgba(0, 0, 0, 0.05)' },
-                title: { display: true, text: 'Number of Vehicles', font: { size: 14, weight: 'bold' } }
-            },
-            y: {
-                grid: { display: false },
-                ticks: { font: { size: 12 } },
-                title: { display: true, text: 'Time Period', font: { size: 14, weight: 'bold' } }
-            }
-        },
-        // Add these options for consistent bar sizing
-        barThickness: 20, // Fixed bar thickness
-        categoryPercentage: 0.8, // Controls the ratio of bar width to available space
-        barPercentage: 0.9 // Controls the ratio of bar width to category width
-
 
         // Load data from local storage
         function loadFromLocalStorage() {
@@ -1204,11 +1165,13 @@
                             gapi.client.setToken({ access_token: accessToken });
                             syncStatus.textContent = 'Connected to Google Sheets';
                             syncIndicator.className = 'sync-indicator sync-active';
+                            document.getElementById('signInBtn').classList.add('hidden');
                             checkSpreadsheetAccess();
                         } else {
                             console.error('Authentication failed: No access token received');
                             syncStatus.textContent = 'Authentication failed. Click Sign In and allow popups.';
                             syncIndicator.className = 'sync-indicator sync-inactive';
+                            document.getElementById('signInBtn').classList.remove('hidden');
                         }
                     },
                     error_callback: (error) => {
@@ -1219,6 +1182,7 @@
                         }
                         syncStatus.textContent = `Sign-in failed: ${errorMessage}`;
                         syncIndicator.className = 'sync-indicator sync-inactive';
+                        document.getElementById('signInBtn').classList.remove('hidden');
                     }
                 });
                 tokenClient.requestAccessToken({ prompt: '' });
@@ -1226,6 +1190,7 @@
                 console.error('Error initializing Google Sign-In:', error);
                 syncStatus.textContent = 'Sign-in initialization failed';
                 syncIndicator.className = 'sync-indicator sync-inactive';
+                document.getElementById('signInBtn').classList.remove('hidden');
             }
         }
 
@@ -1353,6 +1318,6 @@
             }
         });
     });
-    </script>
+</script>
 </body>
 </html>
