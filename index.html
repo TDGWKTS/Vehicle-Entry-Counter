@@ -717,30 +717,30 @@ document.addEventListener('DOMContentLoaded', () => {
         const hours = now.getHours();
         const minutes = now.getMinutes();
         
-        // Calculate total minutes since 07:30
-        const minutesSinceStart = (hours * 60 + minutes) - (7 * 60 + 30);
+        // Calculate total minutes since 00:00
+        const totalMinutes = hours * 60 + minutes;
         
-        // If outside counting hours (before 07:30 or after 02:29 next day)
-        if (minutesSinceStart < 0 || (hours >= 2 && minutes >= 30) || hours > 2) {
-            return -1;
+        // Define start and end of counting hours
+        const startCounting = 7 * 60 + 30; // 07:30
+        const endCounting = (24 + 2) * 60 + 29; // 02:29 next day (26:29)
+        
+        // Check if time is within counting hours (07:30 - 02:29 next day)
+        if ((totalMinutes >= startCounting && totalMinutes < 24 * 60) || 
+            (totalMinutes >= 0 && totalMinutes <= 2 * 60 + 29)) {
+            // Calculate minutes since 07:30
+            let minutesSinceStart = totalMinutes - startCounting;
+            if (totalMinutes < startCounting) {
+                minutesSinceStart += 24 * 60; // Adjust for times after midnight
+            }
+            
+            // Calculate period index (each period is 60 minutes)
+            let periodIndex = Math.floor(minutesSinceStart / 60);
+            
+            // Ensure index is within bounds
+            return Math.min(Math.max(periodIndex, 0), timePeriods.length - 1);
         }
         
-        // Calculate period index (each period is 60 minutes)
-        let periodIndex = Math.floor(minutesSinceStart / 60);
-        
-        // Adjust for late-night periods
-        if (hours >= 23 && hours < 24) {
-            periodIndex = 16; // 23:30 - 00:29
-        } else if (hours === 0) {
-            periodIndex = 16 + (minutes >= 30 ? 1 : 0); // 00:30 - 01:29
-        } else if (hours === 1) {
-            periodIndex = 17 + (minutes >= 30 ? 1 : 0); // 01:30 - 02:29
-        } else if (hours === 2 && minutes < 30) {
-            periodIndex = 18;
-        }
-        
-        // Ensure index is within bounds
-        return Math.min(Math.max(periodIndex, 0), timePeriods.length - 1);
+        return -1; // Outside counting hours
     }
 
     // Function to update the table
